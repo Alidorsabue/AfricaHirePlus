@@ -1,0 +1,23 @@
+# AfricaHirePlus
+.env
+*.pyc
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+venv/
+.venv/
+env/
+*.egg-info/
+.eggs/
+dist/
+build/
+media/
+staticfiles/
+*.log
+db.sqlite3
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo

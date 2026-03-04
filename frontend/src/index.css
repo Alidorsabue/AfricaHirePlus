@@ -1,0 +1,33 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-sans: 'DM Sans', system-ui, sans-serif;
+  --color-ahp-primary: #0d9488;
+  --color-ahp-primary-dark: #0f766e;
+  --color-ahp-accent: #f59e0b;
+  --color-ahp-surface: #f8fafc;
+  --color-ahp-border: #e2e8f0;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--color-ahp-surface);
+  color: #1e293b;
+  -webkit-font-smoothing: antialiased;
+}
+
+html.dark body {
+  background: #0f172a;
+  color: #e2e8f0;
+}
+
+#root {
+  min-height: 100vh;
+}

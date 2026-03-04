@@ -1,0 +1,32 @@
+# AfricaHirePlus ATS - Dépendances Python
+Django>=4.2,<5.1
+djangorestframework>=3.14,<4.0
+djangorestframework-simplejwt>=5.3,<6.0
+django-cors-headers>=4.3,<5.0
+django-filter>=23.5,<25.0
+psycopg[binary]>=3.1,<4.0
+python-dotenv>=1.0,<2.0
+Pillow>=10.0,<11.0
+
+# S3 / stockage
+boto3>=1.33,<2.0
+django-storages>=1.14,<2.0
+
+# Export Excel
+openpyxl>=3.1,<4.0
+
+# Export PDF rapports
+reportlab>=4.0,<5.0
+
+# Extraction texte CV (PDF / Word) pour recherche et scoring
+pypdf>=4.0,<6.0
+python-docx>=1.0,<2.0
+
+# Analyse sémantique et matching automatique (TF-IDF + similarité cosinus + embeddings)
+scikit-learn>=1.3,<2.0
+sentence-transformers>=2.2,<3.0
+
+# Sécurité & perf
+gunicorn>=21.0,<23.0
+whitenoise>=6.6,<7.0
+dj-database-url>=2.1,<3.0
