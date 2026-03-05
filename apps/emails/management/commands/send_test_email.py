@@ -1,7 +1,7 @@
 """
 Envoie un e-mail de test pour vérifier la configuration SMTP.
 Usage:
-  python manage.py send_test_email destinataire@example.com
+  python manage.py send_test_email alidorsabue1@outlook.com
 """
 from django.core.mail import send_mail
 from django.conf import settings

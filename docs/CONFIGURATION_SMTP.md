@@ -114,7 +114,7 @@ DEFAULT_FROM_EMAIL=noreply@africahireplus.com
 Après avoir configuré les variables et redémarré l’application :
 
 ```bash
-python manage.py send_test_email votre@email.com
+python manage.py send_test_email alidorsabue1@outlook.com
 ```
 
 Un e-mail de test est envoyé à l’adresse indiquée. Si vous le recevez, la configuration SMTP est correcte.

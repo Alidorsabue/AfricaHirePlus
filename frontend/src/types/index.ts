@@ -294,11 +294,13 @@ export interface CandidateTestResult {
   application: number
   test: number
   status: string
-  score: string | null
-  max_score: string | null
+  score: string | number | null
+  max_score: string | number | null
   answers: Record<string, unknown>
   started_at: string | null
   submitted_at: string | null
+  tab_switch_count?: number
+  is_flagged?: boolean
   created_at: string
   updated_at: string
 }

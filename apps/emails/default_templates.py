@@ -19,17 +19,17 @@ DEFAULT_TEMPLATES = {
         'body_html': '''<p>Bonjour {{ candidate_name }},</p>
 <p>Nous accusons réception de votre candidature pour le poste <strong>{{ job_title }}</strong> au sein de {{ company_name }}.</p>
 <p>Votre dossier va être étudié par notre équipe. Nous vous recontacterons si votre profil correspond à nos critères.</p>
-<p>Cordialement,<br/>L'équipe {{ company_name }}</p>''',
-        'body_text': 'Bonjour {{ candidate_name }}, Nous avons bien reçu votre candidature pour le poste {{ job_title }} au sein de {{ company_name }}. Nous vous recontacterons si votre profil correspond à nos critères. Cordialement, L\'équipe {{ company_name }}',
+<p>Cordialement,<br/>L'équipe RH de {{ company_name }}</p>''',
+        'body_text': 'Bonjour {{ candidate_name }}, Nous avons bien reçu votre candidature pour le poste {{ job_title }} au sein de {{ company_name }}. Nous vous recontacterons si votre profil correspond à nos critères. Cordialement, L\'équipe RH de {{ company_name }}',
     },
     EmailTemplate.TemplateType.SHORTLIST_NOTIFICATION: {
         'name': 'Notification shortlist',
         'subject': 'Votre candidature a été présélectionnée – {{ job_title }}',
         'body_html': '''<p>Bonjour {{ candidate_name }},</p>
-<p>Bonne nouvelle : votre candidature pour le poste <strong>{{ job_title }}</strong> au sein de {{ company_name }} a été retenue pour la suite du processus.</p>
+<p>Bonne nouvelle : votre candidature pour le poste de <strong>{{ job_title }}</strong> au sein de {{ company_name }} a été retenue pour la suite du processus.</p>
 <p>Nous vous contacterons prochainement pour les prochaines étapes (entretien, test, etc.).</p>
-<p>Cordialement,<br/>L'équipe {{ company_name }}</p>''',
-        'body_text': 'Bonjour {{ candidate_name }}, Votre candidature pour le poste {{ job_title }} a été présélectionnée. Nous vous contacterons pour les prochaines étapes. Cordialement, L\'équipe {{ company_name }}',
+<p>Cordialement,<br/>L'équipe RH de {{ company_name }}</p>''',
+        'body_text': 'Bonjour {{ candidate_name }}, Votre candidature pour le poste {{ job_title }} a été présélectionnée. Nous vous contacterons pour les prochaines étapes. Cordialement, L\'équipe RH de {{ company_name }}',
     },
     EmailTemplate.TemplateType.APPLICATION_REJECTED: {
         'name': 'Candidature non retenue',
@@ -37,8 +37,8 @@ DEFAULT_TEMPLATES = {
         'body_html': '''<p>Bonjour {{ candidate_name }},</p>
 <p>Suite à l'étude de votre candidature pour le poste <strong>{{ job_title }}</strong> au sein de {{ company_name }}, nous sommes au regret de vous informer que nous ne retenons pas votre profil pour cette offre.</p>
 <p>Nous vous remercions pour l'intérêt que vous avez porté à notre entreprise et vous souhaitons beaucoup de succès dans vos démarches.</p>
-<p>Cordialement,<br/>L'équipe {{ company_name }}</p>''',
-        'body_text': 'Bonjour {{ candidate_name }}, Suite à l\'étude de votre candidature pour le poste {{ job_title }}, nous ne retenons pas votre profil pour cette offre. Nous vous remercions et vous souhaitons succès dans vos démarches. Cordialement, L\'équipe {{ company_name }}',
+<p>Cordialement,<br/>L'équipe RH de {{ company_name }}</p>''',
+        'body_text': 'Bonjour {{ candidate_name }}, Suite à l\'étude de votre candidature pour le poste {{ job_title }}, nous ne retenons pas votre profil pour cette offre. Nous vous remercions et vous souhaitons succès dans vos démarches. Cordialement, L\'équipe RH de {{ company_name }}',
     },
 }
 

@@ -5,7 +5,6 @@ import { useQuery } from '@tanstack/react-query'
 import { Plus, Pencil, Download, ExternalLink } from 'lucide-react'
 import { jobsApi } from '../api/jobs'
 import { unwrapList } from '../api/utils'
-import type { JobOffer } from '../types'
 
 const statusKeys: Record<string, string> = {
   draft: 'jobs.draft',

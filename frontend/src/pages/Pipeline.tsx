@@ -21,7 +21,9 @@ import { ApplicationCard } from '../components/ApplicationCard'
 const STATUSES: ApplicationStatus[] = [
   'applied',
   'preselected',
+  'rejected_preselection',
   'shortlisted',
+  'rejected_selection',
   'interview',
   'offer',
   'hired',
@@ -32,7 +34,9 @@ const STATUSES: ApplicationStatus[] = [
 const statusLabelKeys: Record<ApplicationStatus, string> = {
   applied: 'pipeline.applied',
   preselected: 'pipeline.preselected',
+  rejected_preselection: 'pipeline.rejected_preselection',
   shortlisted: 'pipeline.shortlisted',
+  rejected_selection: 'pipeline.rejected_selection',
   interview: 'pipeline.interview',
   offer: 'pipeline.offer',
   hired: 'pipeline.hired',

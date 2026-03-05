@@ -32,9 +32,11 @@ export default function TestResults() {
     return `${name} – ${job?.title ?? ''}`
   }
 
+  const toNum = (v: string | number | null | undefined) =>
+    typeof v === 'number' ? v : v != null ? Number(v) : 0
   const avgScore =
     results.length > 0
-      ? results.reduce((acc, r) => acc + (r.score ?? 0), 0) / results.length
+      ? results.reduce((acc, r) => acc + toNum(r.score), 0) / results.length
       : 0
 
   if (isLoading) {
@@ -76,7 +78,7 @@ export default function TestResults() {
           <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800/50">
             <p className="text-xs font-medium uppercase text-slate-500">Flagged</p>
             <p className="mt-2 text-2xl font-semibold text-slate-800 dark:text-slate-100">
-              {results.filter((r) => r.is_flagged).length}
+              {results.filter((r) => r.is_flagged === true).length}
             </p>
           </div>
         </div>
@@ -118,7 +120,7 @@ export default function TestResults() {
               <tbody className="divide-y divide-slate-200 dark:divide-slate-600">
                 {results
                   .slice()
-                  .sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
+                  .sort((a, b) => toNum(b.score) - toNum(a.score))
                   .map((r) => {
                     const started = r.started_at ? new Date(r.started_at).getTime() : null
                     const submitted = r.submitted_at ? new Date(r.submitted_at).getTime() : null
@@ -139,7 +141,7 @@ export default function TestResults() {
                         <td className="px-4 py-3">
                           <span
                             className={`rounded px-2 py-0.5 text-xs ${
-                              r.is_flagged
+                              r.is_flagged === true
                                 ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-200'
                                 : 'bg-slate-100 text-slate-700 dark:bg-slate-600 dark:text-slate-100'
                             }`}
@@ -151,7 +153,7 @@ export default function TestResults() {
                           {r.score != null && r.max_score != null ? `${r.score} / ${r.max_score}` : '—'}
                         </td>
                         <td className="px-4 py-3 text-sm text-slate-700 dark:text-slate-300">
-                          {r.tab_switch_count ?? 0}
+                          {r.tab_switch_count != null ? r.tab_switch_count : '—'}
                         </td>
                         <td className="px-4 py-3 text-sm text-slate-700 dark:text-slate-300">
                           {durationMinutes != null ? `${durationMinutes.toFixed(1)} min` : '—'}
