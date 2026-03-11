@@ -31,7 +31,7 @@ def company_post_save_create_license(sender, instance, created, **kwargs):
     """À la création d'une entreprise, attribue une licence unique (défaut 1 an), renouvelable."""
     if not created:
         return
-    if hasattr(instance, 'license') and instance.license:
+    if CompanyLicense.objects.filter(company=instance).exists():
         return
     try:
         today = timezone.now().date()

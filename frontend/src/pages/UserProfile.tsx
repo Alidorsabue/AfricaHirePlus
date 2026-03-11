@@ -85,7 +85,7 @@ export default function UserProfile() {
   }, [user])
 
   const updateMutation = useMutation({
-    mutationFn: async (payload: Partial<UserType> & { avatar?: File }) => {
+    mutationFn: async (payload: Omit<Partial<UserType>, 'avatar'> & { avatar?: File }) => {
       if (payload.avatar) {
         const fd = new FormData()
         fd.append('username', form.username)
