@@ -1,8 +1,8 @@
 """
-Sérialiseur entreprise : champs complets (nom, slug, logo, contact, etc.) en lecture/écriture.
+Sérialiseurs entreprise et licence : champs complets en lecture/écriture.
 """
 from rest_framework import serializers
-from .models import Company
+from .models import Company, CompanyLicense
 
 
 class CompanySerializer(serializers.ModelSerializer):
@@ -15,3 +15,27 @@ class CompanySerializer(serializers.ModelSerializer):
             'is_active', 'created_at', 'updated_at',
         ]
         read_only_fields = ['id', 'slug', 'created_at', 'updated_at']
+
+
+class CompanyLicenseSerializer(serializers.ModelSerializer):
+    """Sérialiseur licence : lecture + renouvellement (superadmin)."""
+    company_name = serializers.CharField(source='company.name', read_only=True)
+    is_valid = serializers.BooleanField(read_only=True)
+    duration_display = serializers.CharField(source='get_duration_months_display', read_only=True)
+
+    class Meta:
+        model = CompanyLicense
+        fields = [
+            'id', 'company', 'company_name', 'license_key', 'duration_months', 'duration_display',
+            'start_date', 'end_date', 'is_valid', 'created_at', 'updated_at',
+        ]
+        read_only_fields = ['id', 'company', 'license_key', 'start_date', 'created_at', 'updated_at']
+
+
+class CompanyLicenseRenewSerializer(serializers.Serializer):
+    """Payload pour renouveler une licence : durée optionnelle (3, 6, 9, 12, 24 mois)."""
+    duration_months = serializers.ChoiceField(
+        choices=CompanyLicense.DURATION_CHOICES,
+        required=False,
+        help_text='Si absent, réutilise la durée actuelle de la licence.',
+    )

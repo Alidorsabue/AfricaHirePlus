@@ -63,16 +63,107 @@ Deux façons, une seule suffit :
 
 Le **port** est fourni par Railway via `$PORT`.
 
-## 5. Premier superutilisateur
+## 5. Premier Super Admin
 
-En local (avec `DATABASE_URL` ou `POSTGRES_*` pointant vers la base Railway) :
+AfricaHirePlus utilise un rôle **Super Admin** (accès plateforme complet). Pour créer ce compte :
+
+**En interactif** (mot de passe demandé en ligne de commande) :
 
 ```bash
 set DJANGO_SETTINGS_MODULE=config.settings.prod
-python manage.py createsuperuser
+python manage.py create_superadmin
 ```
 
-Ou via **Railway CLI** : ouvrir un shell du service et lancer la même commande après avoir exporté `DJANGO_SETTINGS_MODULE=config.settings.prod`.
+**Sans interaction** (CI / Railway shell avec variable d’environnement) :
+
+```bash
+set DJANGO_SETTINGS_MODULE=config.settings.prod
+set SUPERADMIN_PASSWORD=VotreMotDePasseSecret
+python manage.py create_superadmin --username admin --email admin@example.com --no-input
+```
+
+Sur Railway : ouvrir un shell du service backend, exporter `DJANGO_SETTINGS_MODULE=config.settings.prod` (et éventuellement `SUPERADMIN_PASSWORD`), puis lancer la commande ci-dessus.
+
+**Alternative** : `python manage.py createsuperuser` crée un compte Django staff/superuser, mais avec le rôle « Recruiter ». Vous pouvez ensuite passer son rôle à « Super Admin » depuis l’admin Django.
+
+### Corriger un utilisateur admin existant sur Railway (depuis votre terminal)
+
+Si un utilisateur existe déjà en base mais que la **connexion à l’admin Django ne marche pas** (mot de passe en clair ou rôle incorrect), vous pouvez lancer la commande **depuis votre ordinateur** en vous connectant à la base Railway. Deux façons :
+
+---
+
+#### Méthode 1 : Railway CLI (recommandé)
+
+La commande s’exécute **en local** avec les variables d’environnement du service Railway (donc la base Railway est utilisée).
+
+1. **Installer Railway CLI** (une seule fois)  
+   - [Documentation](https://docs.railway.app/guides/cli)  
+   - Exemple (Windows avec npm) : `npm install -g @railway/cli`  
+   - Ou télécharger le binaire depuis GitHub : [railway/cli](https://github.com/railwayapp/cli/releases)
+
+2. **Se placer à la racine du projet** (là où se trouve `manage.py`) :
+   ```bash
+   cd chemin/vers/AfricaHirePlus
+   ```
+
+3. **Se connecter et lier le projet** (une fois par projet) :
+   ```bash
+   railway login
+   railway link
+   ```
+   Choisir le **projet** puis le **service backend** (Django) quand on vous le demande.
+
+4. **Lancer la correction** (la commande tourne en local mais utilise la base Railway) :
+   ```bash
+   railway run python manage.py fix_admin_user Alidorsabue
+   ```
+   Saisir le **nouveau mot de passe** quand il est demandé (celui que vous utiliserez pour `/admin/`).
+
+5. **Se connecter à l’admin**  
+   - URL : `https://votre-backend.up.railway.app/admin/`  
+   - Identifiant : `Alidorsabue`  
+   - Mot de passe : celui que vous venez de définir.
+
+---
+
+#### Méthode 2 : Variables d’environnement copiées depuis Railway
+
+Sans CLI : vous copiez `DATABASE_URL` (et éventuellement d’autres variables) depuis le dashboard Railway, puis vous lancez la commande **en local** avec ces variables.
+
+1. **Récupérer les variables sur Railway**
+   - Railway → votre projet → service **PostgreSQL** → onglet **Variables** (ou **Connect**).
+   - Copier la valeur de **`DATABASE_URL`** (ex. `postgresql://postgres:xxx@xxx.railway.app:5432/railway`).
+   - Service **backend** (Django) → **Variables** : noter **`DJANGO_SECRET_KEY`** (obligatoire en prod).
+
+2. **Ouvrir un terminal** à la racine du projet AfricaHirePlus (où se trouve `manage.py`).
+
+3. **Définir les variables puis lancer la commande**
+
+   **Sous Windows (PowerShell ou CMD)** :
+   ```bash
+   set DJANGO_SETTINGS_MODULE=config.settings.prod
+   set DATABASE_URL=postgresql://postgres:VOTRE_MOT_DE_PASSE@xxx.railway.app:5432/railway
+   set DJANGO_SECRET_KEY=votre_secret_key_du_service_backend
+   python manage.py fix_admin_user Alidorsabue
+   ```
+   Remplacez `DATABASE_URL` et `DJANGO_SECRET_KEY` par les vraies valeurs copiées depuis Railway. Quand on vous demande le mot de passe, saisissez le nouveau mot de passe pour l’admin.
+
+   **Sous Linux / macOS (bash)** :
+   ```bash
+   export DJANGO_SETTINGS_MODULE=config.settings.prod
+   export DATABASE_URL="postgresql://postgres:VOTRE_MOT_DE_PASSE@xxx.railway.app:5432/railway"
+   export DJANGO_SECRET_KEY="votre_secret_key_du_service_backend"
+   python manage.py fix_admin_user Alidorsabue
+   ```
+
+4. **Se connecter à l’admin**  
+   - URL : `https://votre-backend.up.railway.app/admin/`  
+   - Identifiant : `Alidorsabue`  
+   - Mot de passe : celui que vous avez défini à l’étape 3.
+
+---
+
+La commande `fix_admin_user` enregistre le mot de passe (hashé), met le rôle à `super_admin`, et `is_staff` / `is_superuser` à `True`.
 
 ## 6. Déployer le frontend sur Railway (tout sur Railway)
 

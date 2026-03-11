@@ -7,6 +7,7 @@ import { Link } from 'react-router-dom'
 import { testsApi } from '../api/tests'
 import { applicationsApi } from '../api/applications'
 import { unwrapList } from '../api/utils'
+import type { Application, CandidateTestResult } from '../types'
 
 export default function TestResults() {
   const { t } = useTranslation()
@@ -16,15 +17,15 @@ export default function TestResults() {
     queryFn: () => testsApi.results.list(),
   })
 
-  const results = unwrapList(resultsData?.data ?? [])
+  const results = unwrapList<CandidateTestResult>(resultsData?.data ?? [])
 
-  const { data: applications = [] } = useQuery({
+  const { data: applications = [] } = useQuery<Application[]>({
     queryKey: ['applications'],
-    queryFn: async () => unwrapList((await applicationsApi.list()).data),
+    queryFn: async () => unwrapList<Application>((await applicationsApi.list()).data),
   })
 
   const getApplicationLabel = (appId: number) => {
-    const app = applications.find((a) => a.id === appId)
+    const app = applications.find((a: Application) => a.id === appId)
     if (!app) return `#${appId}`
     const cand = typeof app.candidate === 'object' ? app.candidate : null
     const job = typeof app.job_offer === 'object' ? app.job_offer : null
