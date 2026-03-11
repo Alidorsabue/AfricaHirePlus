@@ -52,6 +52,7 @@ export default function JobForm() {
   })
   const [documentFile, setDocumentFile] = useState<File | null>(null)
   const [existingDocumentUrl, setExistingDocumentUrl] = useState<string | null>(null)
+  const [formError, setFormError] = useState<string | null>(null)
 
   const { data: job, isLoading } = useQuery({
     queryKey: ['job', id],
@@ -140,15 +141,29 @@ export default function JobForm() {
     fd.append('salary_visible', String(form.salary_visible))
     if (form.salary_min !== '') fd.append('salary_min', String(form.salary_min))
     if (form.salary_max !== '') fd.append('salary_max', String(form.salary_max))
-    if (form.published_at) fd.append('published_at', new Date(form.published_at).toISOString())
-    if (form.deadline) fd.append('deadline', new Date(form.deadline).toISOString())
+    fd.append('published_at', new Date(form.published_at).toISOString())
+    fd.append('deadline', new Date(form.deadline).toISOString())
     if (documentFile) fd.append('description_document', documentFile)
     return fd
   }
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
+    setFormError(null)
     if (descriptionRequired && !form.description.trim()) {
+      setFormError(t('jobs.descriptionOrDocument'))
+      return
+    }
+    if (!form.published_at?.trim()) {
+      setFormError(t('jobs.publishedAtRequired'))
+      return
+    }
+    if (!form.deadline?.trim()) {
+      setFormError(t('jobs.deadlineRequired'))
+      return
+    }
+    if (isNew && (user?.company == null || user?.company === undefined)) {
+      setFormError(t('jobs.companyRequired'))
       return
     }
     if (documentFile) {
@@ -192,9 +207,9 @@ export default function JobForm() {
         {isNew ? t('jobs.new') : t('jobs.edit')}
       </h1>
       <form onSubmit={handleSubmit} className="mt-6 space-y-6 rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-600 dark:bg-slate-800 dark:shadow-slate-900/50">
-        {error && (
+        {(error || formError) && (
           <div className="rounded-lg bg-red-50 p-3 text-sm text-red-700 dark:bg-red-900/30 dark:text-red-300">
-            {getApiErrorMessage(error)}
+            {formError || (error ? getApiErrorMessage(error) : '')}
           </div>
         )}
         <div className="grid gap-6 sm:grid-cols-2">
@@ -253,23 +268,25 @@ export default function JobForm() {
             />
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">{t('jobs.publishedAt')}</label>
+            <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">{t('jobs.publishedAt')} *</label>
             <input
               type="datetime-local"
               name="published_at"
               value={form.published_at}
               onChange={handleChange}
+              required
               className="w-full rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-slate-900 focus:border-teal-500 focus:outline-none dark:border-slate-600 dark:bg-slate-700 dark:text-slate-100"
             />
             <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{t('jobs.publishedAtHint')}</p>
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">{t('jobs.deadline')}</label>
+            <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">{t('jobs.deadline')} *</label>
             <input
               type="datetime-local"
               name="deadline"
               value={form.deadline}
               onChange={handleChange}
+              required
               className="w-full rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-slate-900 focus:border-teal-500 focus:outline-none dark:border-slate-600 dark:bg-slate-700 dark:text-slate-100"
             />
             <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{t('jobs.deadlineHint')}</p>

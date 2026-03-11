@@ -146,6 +146,25 @@ class JobOfferSerializer(serializers.ModelSerializer):
             attrs['salary_min'] = None
         if attrs.get('salary_max') == '':
             attrs['salary_max'] = None
+        # Date de publication et date de clôture obligatoires
+        if not self.instance:
+            if not attrs.get('published_at'):
+                raise serializers.ValidationError({
+                    'published_at': 'La date de publication est obligatoire.'
+                })
+            if not attrs.get('deadline'):
+                raise serializers.ValidationError({
+                    'deadline': "La date et l'heure de clôture sont obligatoires."
+                })
+        else:
+            if 'published_at' in attrs and not attrs['published_at'] and not getattr(self.instance, 'published_at', None):
+                raise serializers.ValidationError({
+                    'published_at': 'La date de publication est obligatoire.'
+                })
+            if 'deadline' in attrs and not attrs['deadline'] and not getattr(self.instance, 'deadline', None):
+                raise serializers.ValidationError({
+                    'deadline': "La date et l'heure de clôture sont obligatoires."
+                })
         return _validate_description_or_document(
             attrs, instance=self.instance, request=self.context.get('request')
         )

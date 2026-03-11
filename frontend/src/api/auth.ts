@@ -10,6 +10,18 @@ export const authApi = {
 
   me: () => api.get<User>('/auth/me/'),
 
+  updateMe: (
+    data:
+      | Partial<Pick<User, 'username' | 'email' | 'first_name' | 'last_name' | 'phone'>>
+      | FormData
+  ) => api.patch<User>('/auth/me/', data),
+
+  changePassword: (data: {
+    current_password: string
+    new_password: string
+    new_password_confirm: string
+  }) => api.post<{ message: string }>('/auth/change-password/', data),
+
   registerCompany: (data: {
     company_name: string
     company_slug?: string

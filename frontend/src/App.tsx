@@ -33,6 +33,8 @@ import MesCandidatures from './pages/MesCandidatures'
 import TestAccess from './pages/TestAccess'
 import OffresCandidat from './pages/OffresCandidat'
 import MonProfil from './pages/MonProfil'
+import UserProfile from './pages/UserProfile'
+import ProtectedRoute from './components/ProtectedRoute'
 import './i18n'
 
 // Client React Query : 1 retry, pas de refetch au focus
@@ -51,6 +53,8 @@ function AppRoutes() {
       <Route path="/login" element={user ? <Navigate to="/" replace /> : <Login />} />
       <Route path="/register" element={user ? <Navigate to="/" replace /> : <RegisterCompany />} />
       <Route path="/register/candidate" element={<RegisterCandidate />} />
+      {/* Profil compte utilisateur (tous rôles) */}
+      <Route path="/profil" element={<ProtectedRoute><UserProfile /></ProtectedRoute>} />
       {/* Offres publiques (sans auth) : détail offre, formulaire de candidature */}
       <Route path="/offres/:slug" element={<PublicJob />} />
       <Route path="/offres/:slug/postuler" element={<PublicJobApply />} />

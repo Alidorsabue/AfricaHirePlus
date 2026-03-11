@@ -8,6 +8,7 @@ from rest_framework.response import Response
 from .models import User
 from .serializers import (
     UserSerializer,
+    ChangePasswordSerializer,
     RegisterSerializer,
     RegisterCompanySerializer,
     RegisterRecruiterSerializer,
@@ -73,9 +74,23 @@ class RegisterCandidateView(generics.GenericAPIView):
 
 
 class MeView(generics.RetrieveUpdateAPIView):
-    """Profil de l'utilisateur connecté (GET/PATCH /api/users/me/)."""
+    """Profil de l'utilisateur connecté (GET/PATCH /api/v1/auth/me/)."""
     serializer_class = UserSerializer
     permission_classes = [IsAuthenticated]
 
     def get_object(self):
         return self.request.user
+
+
+class ChangePasswordView(generics.GenericAPIView):
+    """Changement de mot de passe (POST /api/v1/auth/change-password/)."""
+    serializer_class = ChangePasswordSerializer
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        serializer = self.get_serializer(data=request.data, context={'request': request})
+        serializer.is_valid(raise_exception=True)
+        user = request.user
+        user.set_password(serializer.validated_data['new_password'])
+        user.save(update_fields=['password'])
+        return Response({'message': 'Mot de passe mis à jour.'}, status=status.HTTP_200_OK)

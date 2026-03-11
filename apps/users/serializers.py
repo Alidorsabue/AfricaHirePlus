@@ -19,6 +19,25 @@ class UserSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'date_joined', 'role', 'company']
 
 
+class ChangePasswordSerializer(serializers.Serializer):
+    """Changement de mot de passe pour l'utilisateur connecté."""
+    current_password = serializers.CharField(write_only=True, required=True)
+    new_password = serializers.CharField(write_only=True, min_length=8, required=True)
+    new_password_confirm = serializers.CharField(write_only=True, required=True)
+
+    def validate(self, data):
+        if data['new_password'] != data.get('new_password_confirm'):
+            raise serializers.ValidationError({
+                'new_password_confirm': 'Les mots de passe ne correspondent pas.'
+            })
+        return data
+
+    def validate_current_password(self, value):
+        if not self.context['request'].user.check_password(value):
+            raise serializers.ValidationError('Mot de passe actuel incorrect.')
+        return value
+
+
 class RegisterSerializer(serializers.ModelSerializer):
     """Inscription générique (recruteur ou super admin selon payload)."""
     password = serializers.CharField(write_only=True, min_length=8)
