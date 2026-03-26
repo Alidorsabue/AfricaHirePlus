@@ -42,6 +42,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = useCallback(
     async (username: string, password: string): Promise<User> => {
       const { data } = await authApi.login(username, password)
+      if (!data?.access || !data?.refresh) {
+        // Garde-fou: si l'API renvoie un payload inattendu, ne pas "connecter" l'utilisateur.
+        throw new Error('Réponse d’authentification invalide.')
+      }
       localStorage.setItem('access', data.access)
       localStorage.setItem('refresh', data.refresh)
       const { data: userData } = await authApi.me()
