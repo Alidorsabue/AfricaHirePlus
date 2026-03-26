@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type FormEvent } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useAuth } from '../contexts/AuthContext'
@@ -15,7 +15,7 @@ export default function Login() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
     setError('')
     setLoading(true)
@@ -27,10 +27,34 @@ export default function Login() {
         navigate(next, { replace: true })
       }
     } catch (err: unknown) {
-      const message = err && typeof err === 'object' && 'response' in err
-        ? (err as { response?: { data?: { detail?: string } } }).response?.data?.detail
-        : null
-      setError(typeof message === 'string' ? message : 'Identifiants incorrects.')
+      const apiError = err as {
+        message?: string
+        response?: {
+          status?: number
+          data?: {
+            detail?: string
+            error?: {
+              message?: string
+              details?: { detail?: string }
+            }
+          }
+        }
+      }
+      const status = apiError?.response?.status
+      const message =
+        apiError?.response?.data?.detail ??
+        apiError?.response?.data?.error?.details?.detail ??
+        apiError?.response?.data?.error?.message
+
+      if (typeof message === 'string' && message.trim()) {
+        setError(message)
+      } else if (!status) {
+        setError("Impossible de contacter l'API (réseau/CORS/URL API).")
+      } else if (status === 401) {
+        setError('Identifiants incorrects.')
+      } else {
+        setError('Erreur de connexion. Réessaie dans quelques instants.')
+      }
     } finally {
       setLoading(false)
     }
