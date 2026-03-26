@@ -7,6 +7,7 @@ ou si l'utilisateur n'existe pas / est inactif.
 
 from __future__ import annotations
 
+from django.contrib.auth import get_user_model
 from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from rest_framework_simplejwt.views import TokenObtainPairView
@@ -26,6 +27,18 @@ class StrictTokenObtainPairSerializer(TokenObtainPairSerializer):
     }
 
     def validate(self, attrs):
+        # Autorise la connexion via username ou email, de façon insensible à la casse.
+        # SimpleJWT s'authentifie via `username`, on normalise donc vers le username réel.
+        User = get_user_model()
+        raw_identifier = (attrs.get(self.username_field) or "").strip()
+        if raw_identifier:
+            if "@" in raw_identifier:
+                matched_user = User.objects.filter(email__iexact=raw_identifier).only("username").first()
+            else:
+                matched_user = User.objects.filter(username__iexact=raw_identifier).only("username").first()
+            if matched_user:
+                attrs[self.username_field] = matched_user.username
+
         data = super().validate(attrs)
 
         # `self.user` est défini par le serializer parent après authenticate()

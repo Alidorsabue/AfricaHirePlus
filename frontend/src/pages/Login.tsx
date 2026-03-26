@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { useState, type ChangeEvent, type FormEvent, type SyntheticEvent } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useAuth } from '../contexts/AuthContext'
@@ -71,7 +71,7 @@ export default function Login() {
             src="/logo/AfricaHire+.png"
             alt="AfricaHire+"
             className="h-40 w-auto object-contain"
-            onError={(e) => { e.currentTarget.style.display = 'none' }}
+            onError={(e: SyntheticEvent<HTMLImageElement>) => { e.currentTarget.style.display = 'none' }}
           />
         </div>
 
@@ -94,7 +94,7 @@ export default function Login() {
             <input
               type="text"
               value={username}
-              onChange={(e) => setUsername(e.target.value)}
+              onChange={(e: ChangeEvent<HTMLInputElement>) => setUsername(e.target.value)}
               placeholder={t('auth.usernamePlaceholder')}
               className="w-full rounded-lg px-4 py-3 placeholder-[#A0AEC0] focus:outline-none focus:ring-2 focus:ring-[#63B3ED]"
               style={{
@@ -112,7 +112,7 @@ export default function Login() {
             <input
               type="password"
               value={password}
-              onChange={(e) => setPassword(e.target.value)}
+              onChange={(e: ChangeEvent<HTMLInputElement>) => setPassword(e.target.value)}
               placeholder={t('auth.passwordPlaceholder')}
               className="w-full rounded-lg px-4 py-3 placeholder-[#A0AEC0] focus:outline-none focus:ring-2 focus:ring-[#63B3ED]"
               style={{
