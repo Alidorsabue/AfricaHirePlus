@@ -71,7 +71,7 @@
     "createAccount": "Create account",
     "noAccount": "No account yet?",
     "hasAccount": "Already have an account?",
-    "registerCandidate": "Candidate",
+    "registerCandidate": "Create candidate account",
     "registerCandidateTitle": "Create candidate account",
     "registerCandidateHint": "Create an account to view job offers and apply. Your information will be saved.",
     "passwordMismatch": "Passwords do not match.",
