@@ -1,5 +1,8 @@
-import axios from 'axios'
+import axios, { isAxiosError, type InternalAxiosRequestConfig } from 'axios'
 import { getApiBaseUrl } from './env'
+import { logApiFailure } from './apiDebug'
+
+type InternalAxiosRequestConfigWithRetry = InternalAxiosRequestConfig & { _retry?: boolean }
 
 export const api = axios.create({
   baseURL: getApiBaseUrl(),
@@ -18,8 +21,15 @@ api.interceptors.request.use((config) => {
 
 api.interceptors.response.use(
   (res) => res,
-  async (err) => {
-    const original = err.config
+  async (err: unknown) => {
+    if (!isAxiosError(err)) {
+      return Promise.reject(err)
+    }
+    logApiFailure('axios', err)
+    const original = err.config as InternalAxiosRequestConfigWithRetry | undefined
+    if (!original) {
+      return Promise.reject(err)
+    }
     if (err.response?.status === 401 && !original._retry) {
       original._retry = true
       const refresh = localStorage.getItem('refresh')

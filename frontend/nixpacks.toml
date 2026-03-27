@@ -1,0 +1,6 @@
+# Railway / Nixpacks : installer les devDependencies (Vite, TypeScript) même si NODE_ENV=production
+[variables]
+NPM_CONFIG_PRODUCTION = "false"
+
+[phases.install]
+cmds = ["npm ci --include=dev"]

@@ -1,7 +1,9 @@
 import { useState, type ChangeEvent, type FormEvent, type SyntheticEvent } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
+import { isAxiosError } from 'axios'
 import { useAuth } from '../contexts/AuthContext'
+import { getApiBaseUrl } from '../api/env'
 
 export default function Login() {
   const { t } = useTranslation()
@@ -27,6 +29,10 @@ export default function Login() {
         navigate(next, { replace: true })
       }
     } catch (err: unknown) {
+      if (!isAxiosError(err)) {
+        console.error('[AfricaHire+ login]', err)
+      }
+
       const apiError = err as {
         message?: string
         response?: {
@@ -49,8 +55,11 @@ export default function Login() {
       if (typeof message === 'string' && message.trim()) {
         setError(message)
       } else if (!status) {
+        const base = getApiBaseUrl()
         setError(
-          "Impossible de contacter l'API. En local : lancez Django sur le port 8000 et le frontend avec npm run dev (http://localhost:3000), ou vérifiez VITE_API_URL."
+          `Impossible de contacter l'API (base : ${base}). Ouvrez la console (F12) pour le détail. ` +
+            'En prod : définissez VITE_API_URL au build Railway et CORS_ALLOWED_ORIGINS sur le backend. ' +
+            'En local : Django sur le port 8000 et npm run dev sur http://localhost:3000.'
         )
       } else if (status === 401) {
         setError('Identifiants incorrects.')
@@ -136,11 +145,11 @@ export default function Login() {
         </form>
 
         <p className="mt-6 text-center text-sm" style={{ color: '#E2E8F0' }}>
-          {t('auth.noAccount')}{' '}
+        {/*   {t('auth.noAccount')}{' '}
           <Link to="/register" className="font-medium hover:underline" style={{ color: '#63B3ED' }}>
             {t('auth.register')}
           </Link>
-          {' · '}
+          {' · '} */}
           <Link to={next ? `/register/candidate?next=${encodeURIComponent(next)}` : '/register/candidate'} className="font-medium hover:underline" style={{ color: '#63B3ED' }}>
             {t('auth.registerCandidate')}
           </Link>
