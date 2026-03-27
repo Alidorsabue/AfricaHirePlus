@@ -9,6 +9,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { User, ArrowLeft } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { authApi } from '../api/auth'
+import { getMediaBaseUrl } from '../api/env'
 import { companiesApi } from '../api/companies'
 import { unwrapList } from '../api/utils'
 import type { User as UserType, Company } from '../types'
@@ -133,8 +134,7 @@ export default function UserProfile() {
     passwordMutation.mutate(passwordForm)
   }
 
-  const apiBase = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000/api/v1'
-  const mediaBase = apiBase.replace(/\/api\/v1\/?$/, '')
+  const mediaBase = getMediaBaseUrl()
   const avatarUrl = user?.avatar
     ? user.avatar.startsWith('http')
       ? user.avatar

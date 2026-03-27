@@ -49,7 +49,9 @@ export default function Login() {
       if (typeof message === 'string' && message.trim()) {
         setError(message)
       } else if (!status) {
-        setError("Impossible de contacter l'API (réseau/CORS/URL API).")
+        setError(
+          "Impossible de contacter l'API. En local : lancez Django sur le port 8000 et le frontend avec npm run dev (http://localhost:3000), ou vérifiez VITE_API_URL."
+        )
       } else if (status === 401) {
         setError('Identifiants incorrects.')
       } else {

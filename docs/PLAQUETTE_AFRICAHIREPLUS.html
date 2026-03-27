@@ -1,0 +1,413 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AfricaHirePlus - Plaquette</title>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --bg-soft: #111b34;
+      --card: #172554;
+      --ink: #e2e8f0;
+      --muted: #cbd5e1;
+      --accent: #f59e0b;
+      --accent-2: #3b82f6;
+      --ok: #22c55e;
+      --border: rgba(148, 163, 184, 0.25);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      margin: 0;
+      padding: 0;
+      background: #020617;
+      color: var(--ink);
+      font-family: "Segoe UI", Arial, sans-serif;
+      line-height: 1.35;
+    }
+
+    .sheet {
+      width: 210mm;
+      min-height: 297mm;
+      margin: 6mm auto;
+      background:
+        radial-gradient(circle at 100% 0%, rgba(245, 158, 11, 0.16), transparent 40%),
+        radial-gradient(circle at 0% 100%, rgba(59, 130, 246, 0.16), transparent 45%),
+        linear-gradient(145deg, var(--bg) 0%, var(--bg-soft) 100%);
+      border: 1px solid var(--border);
+      box-shadow: 0 10px 36px rgba(2, 6, 23, 0.45);
+      padding: 10mm 11mm;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 8px;
+      margin-bottom: 10px;
+    }
+
+    .brand-left {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+    }
+
+    .brand-logo {
+      width: 64px;
+      height: 64px;
+      object-fit: contain;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: rgba(255, 255, 255, 0.03);
+      padding: 4px;
+      flex: 0 0 auto;
+    }
+
+    .brand h1 {
+      margin: 0;
+      font-size: 24px;
+      letter-spacing: 0.4px;
+    }
+
+    .brand h1 .gold {
+      color: var(--accent);
+    }
+
+    .tag {
+      margin: 2px 0 0;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .pill {
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 6px 10px;
+      font-size: 11px;
+      color: var(--muted);
+      white-space: nowrap;
+    }
+
+    .hero {
+      margin-bottom: 10px;
+      padding: 10px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: linear-gradient(135deg, rgba(59, 130, 246, 0.17), rgba(245, 158, 11, 0.1));
+    }
+
+    .hero h2 {
+      margin: 0 0 6px;
+      font-size: 22px;
+      line-height: 1.2;
+    }
+
+    .hero p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+
+    .card {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 8px;
+      background: rgba(15, 23, 42, 0.55);
+    }
+
+    .card h3 {
+      margin: 0 0 6px;
+      color: #bfdbfe;
+      font-size: 13px;
+    }
+
+    ul {
+      margin: 0;
+      padding-left: 18px;
+    }
+
+    li {
+      margin: 3px 0;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .ok li::marker {
+      color: var(--ok);
+    }
+
+    .roles {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 8px;
+      margin-top: 8px;
+    }
+
+    .role h4 {
+      margin: 0 0 5px;
+      font-size: 12px;
+      color: #fde68a;
+    }
+
+    .section-title {
+      margin: 0 0 6px;
+      font-size: 15px;
+      color: #dbeafe;
+    }
+
+    .foot {
+      margin-top: 8px;
+      border-top: 1px solid var(--border);
+      padding-top: 8px;
+      font-size: 11px;
+      color: var(--muted);
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .kpi {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 6px;
+      margin: 8px 0;
+    }
+
+    .kpi .box {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 8px 6px;
+      text-align: center;
+      background: rgba(30, 41, 59, 0.45);
+    }
+
+    .kpi .num {
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--accent);
+      margin-bottom: 3px;
+    }
+
+    .kpi .lbl {
+      font-size: 10px;
+      color: var(--muted);
+    }
+
+    .cta {
+      margin-top: 8px;
+      border: 1px solid rgba(245, 158, 11, 0.45);
+      border-radius: 12px;
+      padding: 10px;
+      background: linear-gradient(135deg, rgba(245, 158, 11, 0.14), rgba(59, 130, 246, 0.07));
+      font-size: 12px;
+      color: #f8fafc;
+    }
+
+    @media print {
+      body {
+        background: #fff;
+      }
+
+      .sheet {
+        margin: 0;
+        border: none;
+        box-shadow: none;
+        page-break-after: always;
+      }
+
+      .sheet:last-child {
+        page-break-after: auto;
+      }
+    }
+  </style>
+</head>
+<body>
+  <section class="sheet">
+    <header class="brand">
+      <div class="brand-left">
+        <img class="brand-logo" src="../frontend/public/logo/AfricaHire+.png" alt="Logo AfricaHire+" />
+        <div>
+          <h1>AfricaHire<span class="gold">Plus</span></h1>
+          <p class="tag">Plateforme ATS intelligente pour le recrutement en Afrique</p>
+        </div>
+      </div>
+      <div class="pill">Recruter vite, recruter juste</div>
+    </header>
+
+    <div class="hero">
+      <h2>La solution complète pour gérer vos recrutements de A à Z</h2>
+      <p>
+        AfricaHirePlus centralise vos offres, candidatures, évaluations techniques et communication candidat
+        dans une seule plateforme moderne, sécurisée et adaptée aux réalités opérationnelles africaines.
+      </p>
+    </div>
+
+    <div class="grid-2">
+      <article class="card">
+        <h3>Pourquoi choisir AfricaHirePlus ?</h3>
+        <ul class="ok">
+          <li>Architecture multi-entreprise (multi-tenant) avec isolation stricte des données.</li>
+          <li>Workflow ATS complet : offre, candidature, présélection, shortlist, suivi final.</li>
+          <li>Scoring intelligent des candidatures pour accélérer les décisions RH.</li>
+          <li>Sécurité entreprise : JWT, permissions par rôles, validation serveur.</li>
+          <li>Export des données (Excel) et rapports actionnables pour le management.</li>
+          <li>Conçu pour la montée en charge et les équipes en croissance.</li>
+        </ul>
+      </article>
+
+      <article class="card">
+        <h3>Fonctionnalités principales</h3>
+        <ul>
+          <li>Publication et gestion des offres avec statut et suivi.</li>
+          <li>Portail de candidature public avec formulaire complet et upload CV.</li>
+          <li>Détection des doublons et consolidation des profils candidats.</li>
+          <li>Moteur de scoring : préselection_score et selection_score.</li>
+          <li>Tests techniques en ligne avec sessions, auto-save et résultats.</li>
+          <li>Templates d'emails et notifications candidats automatisées.</li>
+          <li>Tableaux de bord, KPI de recrutement et exports XLSX.</li>
+        </ul>
+      </article>
+    </div>
+
+    <h3 class="section-title">Valeur métier immédiate</h3>
+    <div class="grid-2">
+      <article class="card">
+        <ul>
+          <li>Réduction du délai de recrutement grâce à la priorisation automatique des profils.</li>
+          <li>Amélioration de la qualité d'embauche via des critères objectifs et traçables.</li>
+          <li>Meilleure expérience candidat grâce au suivi clair et aux réponses structurées.</li>
+        </ul>
+      </article>
+      <article class="card">
+        <ul>
+          <li>Décisions basées sur les données plutôt que sur l'intuition.</li>
+          <li>Collaboration fluide entre RH, managers et évaluateurs techniques.</li>
+          <li>Visibilité complète du pipeline de recrutement par entreprise.</li>
+        </ul>
+      </article>
+    </div>
+
+    <footer class="foot">
+      <span>Disponible en mode SaaS ou déploiement dédié</span>
+      <span>Support: contact@africahireplus.com</span>
+    </footer>
+  </section>
+
+  <section class="sheet">
+    <header class="brand">
+      <div class="brand-left">
+        <img class="brand-logo" src="../frontend/public/logo/AfricaHire+.png" alt="Logo AfricaHire+" />
+        <div>
+          <h1>AfricaHire<span class="gold">Plus</span></h1>
+          <p class="tag">Fonctionnalités détaillées par rôle</p>
+        </div>
+      </div>
+      <div class="pill">Version plaquette commerciale</div>
+    </header>
+
+    <div class="roles">
+      <article class="card role">
+        <h4>👨‍💼 Recruteur / RH</h4>
+        <ul>
+          <li>Création et diffusion d'offres.</li>
+          <li>Suivi des candidatures par statut.</li>
+          <li>Classement automatique par score.</li>
+          <li>Gestion shortlist et feedback.</li>
+          <li>Export court-list et reporting.</li>
+        </ul>
+      </article>
+      <article class="card role">
+        <h4>🧪 Évaluateur technique</h4>
+        <ul>
+          <li>Création de tests et questions.</li>
+          <li>Correction et notation structurée.</li>
+          <li>Analyse détaillée des résultats.</li>
+          <li>Rapports comparatifs candidats.</li>
+          <li>Aide à la décision finale.</li>
+        </ul>
+      </article>
+      <article class="card role">
+        <h4>🧑‍💻 Candidat</h4>
+        <ul>
+          <li>Candidature simple sur portail public.</li>
+          <li>Upload CV et pièces justificatives.</li>
+          <li>Passage des tests en ligne.</li>
+          <li>Suivi de l'avancement de dossier.</li>
+          <li>Communication fluide avec l'entreprise.</li>
+        </ul>
+      </article>
+    </div>
+
+    <div class="kpi">
+      <div class="box">
+        <div class="num">-40%</div>
+        <div class="lbl">Temps de tri CV</div>
+      </div>
+      <div class="box">
+        <div class="num">x2</div>
+        <div class="lbl">Vitesse de shortlist</div>
+      </div>
+      <div class="box">
+        <div class="num">100%</div>
+        <div class="lbl">Pipeline traçable</div>
+      </div>
+      <div class="box">
+        <div class="num">24/7</div>
+        <div class="lbl">Accès web sécurisé</div>
+      </div>
+    </div>
+
+    <h3 class="section-title">Architecture & technologies</h3>
+    <div class="grid-2">
+      <article class="card">
+        <ul>
+          <li>Backend: Django + Django REST Framework.</li>
+          <li>Frontend: React + TypeScript.</li>
+          <li>Authentification: JWT (access/refresh).</li>
+          <li>Base de données: PostgreSQL (SQLite en dev).</li>
+        </ul>
+      </article>
+      <article class="card">
+        <ul>
+          <li>Stockage de fichiers compatible S3 (MinIO, AWS S3).</li>
+          <li>APIs REST versionnées (`/api/v1`).</li>
+          <li>Séparation stricte par entreprise (multi-tenant).</li>
+          <li>Déploiement cloud prêt production.</li>
+        </ul>
+      </article>
+    </div>
+
+    <div class="cta">
+      <strong>Demandez une démo personnalisée</strong><br />
+      Découvrez comment AfricaHirePlus peut transformer votre process de recrutement, améliorer
+      la qualité d'embauche et renforcer votre marque employeur.
+      <br /><br />
+      Contact commercial: <strong>contact@africahireplus.com</strong> • Téléphone: <strong>+243 XX XXX XXXX</strong>
+    </div>
+
+    <footer class="foot">
+      <span>AfricaHirePlus - ATS moderne, sécurisé et scalable</span>
+      <span>www.africahireplus.com</span>
+    </footer>
+  </section>
+</body>
+</html>
