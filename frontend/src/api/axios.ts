@@ -10,6 +10,8 @@ export const api = axios.create({
 })
 
 api.interceptors.request.use((config) => {
+  // Recalculer la base à chaque requête : normalisation /api/v1 (évite /api/V1 dans les builds anciens ou typos d’env).
+  config.baseURL = getApiBaseUrl()
   const token = localStorage.getItem('access')
   if (token) config.headers.Authorization = `Bearer ${token}`
   // FormData : laisser axios définir Content-Type (multipart/form-data + boundary)

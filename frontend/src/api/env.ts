@@ -1,15 +1,32 @@
 /**
- * Normalise VITE_API_URL : Django monte l’API sous `/api/v1/`.
- * Beaucoup de déploiements Railway ne mettent que `.../api` → les appels partent vers `/api/auth/...` (inexistant).
+ * Normalise VITE_API_URL : Django n’expose que `/api/v1/` (minuscules). `/api/V1/` → 404.
+ * Utilise l’API URL pour le pathname (fiable quelle que soit la casse du segment).
  */
 function normalizeViteApiUrl(url: string): string {
-  const u = url.trim().replace(/\/+$/, '')
-  if (/\/api$/i.test(u)) {
-    return `${u}/v1`
-  }
-  return u
-}
+  const trimmed = url.trim().replace(/\/+$/, '')
+  if (!trimmed) return trimmed
 
+  if (/^https?:\/\//i.test(trimmed)) {
+    try {
+      const u = new URL(trimmed)
+      let p = u.pathname.replace(/\/api\/v1/gi, '/api/v1')
+      if (/\/api$/i.test(p)) {
+        p = `${p}/v1`
+      }
+      u.pathname = p
+      const out = `${u.origin}${u.pathname}`.replace(/\/$/, '')
+      return out
+    } catch {
+      /* fallthrough */
+    }
+  }
+
+  let s = trimmed.replace(/\/api\/v1/gi, '/api/v1')
+  if (/\/api$/i.test(s)) {
+    s = `${s}/v1`
+  }
+  return s
+}
 /**
  * URL de base de l’API REST.
  * - Dev sans VITE_API_URL : `/api/v1` (proxy Vite).
@@ -62,7 +79,7 @@ export function logApiDiagnostics(): void {
 export function getMediaBaseUrl(): string {
   const api = getApiBaseUrl()
   if (api.startsWith('http')) {
-    return api.replace(/\/api\/v1\/?$/, '')
+    return api.replace(/\/api\/v1\/?$/i, '')
   }
   return ''
 }
