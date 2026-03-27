@@ -1,12 +1,15 @@
+import { useMemo } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { User } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
+import { resolveMediaUrl } from '../api/env'
 
 export default function CandidateLayout({ children }: { children: React.ReactNode }) {
   const { t } = useTranslation()
   const { user, logout } = useAuth()
   const navigate = useNavigate()
+  const avatarUrl = useMemo(() => resolveMediaUrl(user?.avatar), [user?.avatar])
 
   const handleLogout = () => {
     logout()
@@ -51,9 +54,9 @@ export default function CandidateLayout({ children }: { children: React.ReactNod
             title={t('candidat.openProfile')}
             aria-label={t('candidat.openProfile')}
           >
-            {user?.avatar ? (
+            {avatarUrl ? (
               <img
-                src={user.avatar}
+                src={avatarUrl}
                 alt=""
                 className="h-9 w-9 rounded-full object-cover"
               />

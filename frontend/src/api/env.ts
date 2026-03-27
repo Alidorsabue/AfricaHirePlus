@@ -83,3 +83,15 @@ export function getMediaBaseUrl(): string {
   }
   return ''
 }
+
+/**
+ * URL affichable pour un média renvoyé par l’API (ex. avatar : `/media/...`).
+ * Sans cela, le navigateur charge `/media/...` sur le domaine du frontend → 404 en prod (API sur autre host).
+ */
+export function resolveMediaUrl(path: string | null | undefined): string | null {
+  if (!path?.trim()) return null
+  const p = path.trim()
+  if (p.startsWith('http://') || p.startsWith('https://')) return p
+  const base = getMediaBaseUrl()
+  return `${base}${p.startsWith('/') ? '' : '/'}${p}`
+}

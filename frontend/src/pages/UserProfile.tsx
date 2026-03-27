@@ -9,7 +9,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { User, ArrowLeft } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { authApi } from '../api/auth'
-import { getMediaBaseUrl } from '../api/env'
+import { resolveMediaUrl } from '../api/env'
 import { companiesApi } from '../api/companies'
 import { unwrapList } from '../api/utils'
 import type { User as UserType, Company } from '../types'
@@ -134,12 +134,7 @@ export default function UserProfile() {
     passwordMutation.mutate(passwordForm)
   }
 
-  const mediaBase = getMediaBaseUrl()
-  const avatarUrl = user?.avatar
-    ? user.avatar.startsWith('http')
-      ? user.avatar
-      : `${mediaBase}${user.avatar.startsWith('/') ? '' : '/'}${user.avatar}`
-    : null
+  const avatarUrl = resolveMediaUrl(user?.avatar)
 
   if (isLoading || !user) {
     return (

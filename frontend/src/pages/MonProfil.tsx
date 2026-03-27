@@ -2,7 +2,7 @@
  * Page « Mon profil » pour le candidat connecté : avatar + détails en sections ouvrables.
  * Les données viennent de GET /api/candidates/me/ (profil sauvegardé lors des candidatures).
  */
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
@@ -21,6 +21,7 @@ import {
   ExternalLink,
 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
+import { resolveMediaUrl } from '../api/env'
 import { candidatesApi } from '../api/candidates'
 import type { CandidateProfile } from '../types'
 
@@ -70,6 +71,7 @@ export default function MonProfil() {
   })
   const profile = profileRes?.data as CandidateProfile | undefined
   const hasProfile = profile && typeof profile === 'object'
+  const avatarUrl = useMemo(() => resolveMediaUrl(user?.avatar), [user?.avatar])
 
   if (isLoading) {
     return (
@@ -116,9 +118,9 @@ export default function MonProfil() {
           title={t('candidat.openProfile')}
           aria-label={t('candidat.openProfile')}
         >
-          {user?.avatar ? (
+          {avatarUrl ? (
             <img
-              src={user.avatar}
+              src={avatarUrl}
               alt=""
               className="h-24 w-24 rounded-full object-cover sm:h-28 sm:w-28"
             />

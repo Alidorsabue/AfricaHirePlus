@@ -2,11 +2,12 @@
  * Menu utilisateur (avatar + nom) : dropdown avec profil, préférences, déconnexion.
  * Fermeture au clic extérieur.
  */
-import { useRef, useState, useEffect } from 'react'
+import { useRef, useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { User, Settings, LogOut, ChevronUp } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
+import { resolveMediaUrl } from '../api/env'
 
 /** Clés i18n pour afficher le rôle (admin, recruteur, candidat) */
 const roleKeys: Record<string, string> = {
@@ -49,6 +50,12 @@ export default function UserMenu({ onOpenPreferences }: UserMenuProps) {
     : ''
   const roleKey = user ? roleKeys[user.role] ?? 'user.roleRecruiter' : ''
 
+  const avatarUrl = useMemo(() => resolveMediaUrl(user?.avatar), [user?.avatar])
+  const [avatarBroken, setAvatarBroken] = useState(false)
+  useEffect(() => {
+    setAvatarBroken(false)
+  }, [avatarUrl])
+
   return (
     <div className="relative" ref={ref}>
       <button
@@ -62,9 +69,14 @@ export default function UserMenu({ onOpenPreferences }: UserMenuProps) {
           <span className="text-sm font-medium text-white">{displayName || user?.username}</span>
           <span className="text-xs text-slate-400">{t(roleKey)}</span>
         </div>
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-violet-600 text-white">
-          {user?.avatar ? (
-            <img src={user.avatar} alt="" className="h-full w-full rounded-full object-cover" />
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-violet-600 text-white">
+          {avatarUrl && !avatarBroken ? (
+            <img
+              src={avatarUrl}
+              alt=""
+              className="h-full w-full object-cover"
+              onError={() => setAvatarBroken(true)}
+            />
           ) : (
             <User className="h-5 w-5" />
           )}
