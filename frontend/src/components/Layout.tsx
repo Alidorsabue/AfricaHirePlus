@@ -15,7 +15,7 @@ import UserMenu from './UserMenu'
 import PreferencesModal from './PreferencesModal'
 import { useAuth } from '../contexts/AuthContext'
 import { companiesApi } from '../api/companies'
-import { getMediaBaseUrl } from '../api/env'
+import { resolveMediaUrl } from '../api/env'
 import type { Company } from '../types'
 
 const nav = [
@@ -53,12 +53,7 @@ export default function Layout({ children }: { children: ReactNode }) {
       cancelled = true
     }
   }, [companyId])
-  const mediaBase = getMediaBaseUrl()
-  const companyLogoUrl = company?.logo
-    ? company.logo.startsWith('http')
-      ? company.logo
-      : `${mediaBase}${company.logo.startsWith('/') ? '' : '/'}${company.logo}`
-    : null
+  const companyLogoUrl = resolveMediaUrl(company?.logo)
 
   return (
     <div className="flex min-h-screen flex-col bg-slate-50 dark:bg-slate-950">

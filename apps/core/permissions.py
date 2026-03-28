@@ -19,6 +19,11 @@ class IsTenantOrSuperAdmin(permissions.BasePermission):
         # Super admin : accès à tout ; recruteur : uniquement objets de sa company
         if request.user.is_super_admin:
             return True
+        # Modèle Company : pas de champ company_id — comparer la PK à user.company_id
+        from apps.companies.models import Company
+
+        if isinstance(obj, Company):
+            return obj.pk == request.user.company_id
         company_id = getattr(obj, 'company_id', None)
         if company_id is None:
             company_id = getattr(obj, 'company', None) and obj.company_id

@@ -77,6 +77,10 @@ export function logApiDiagnostics(): void {
 }
 /** Origine des fichiers médias (avatars, logos entreprise) — cohérent avec getApiBaseUrl(). */
 export function getMediaBaseUrl(): string {
+  const mediaOrigin = import.meta.env.VITE_MEDIA_ORIGIN
+  if (typeof mediaOrigin === 'string' && mediaOrigin.trim()) {
+    return mediaOrigin.trim().replace(/\/+$/, '')
+  }
   const api = getApiBaseUrl()
   if (api.startsWith('http')) {
     return api.replace(/\/api\/v1\/?$/i, '')

@@ -37,7 +37,7 @@ class RegisterCompanyView(generics.GenericAPIView):
             {
                 'message': 'Entreprise et compte recruteur créés.',
                 'company_id': result['company'].id,
-                'user': UserSerializer(result['user']).data,
+                'user': UserSerializer(result['user'], context={'request': request}).data,
             },
             status=status.HTTP_201_CREATED,
         )
@@ -53,7 +53,7 @@ class RegisterRecruiterView(generics.GenericAPIView):
         serializer.is_valid(raise_exception=True)
         user = serializer.save()
         return Response(
-            {'message': 'Recruteur créé.', 'user': UserSerializer(user).data},
+            {'message': 'Recruteur créé.', 'user': UserSerializer(user, context={'request': request}).data},
             status=status.HTTP_201_CREATED,
         )
 
@@ -68,7 +68,7 @@ class RegisterCandidateView(generics.GenericAPIView):
         serializer.is_valid(raise_exception=True)
         user = serializer.save()
         return Response(
-            {'message': 'Compte candidat créé.', 'user': UserSerializer(user).data},
+            {'message': 'Compte candidat créé.', 'user': UserSerializer(user, context={'request': request}).data},
             status=status.HTTP_201_CREATED,
         )
 

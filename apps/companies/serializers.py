@@ -16,6 +16,13 @@ class CompanySerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['id', 'slug', 'created_at', 'updated_at']
 
+    def to_representation(self, instance):
+        ret = super().to_representation(instance)
+        request = self.context.get('request')
+        if instance.logo and request:
+            ret['logo'] = request.build_absolute_uri(instance.logo.url)
+        return ret
+
 
 class CompanyLicenseSerializer(serializers.ModelSerializer):
     """Sérialiseur licence : lecture + renouvellement (superadmin)."""

@@ -18,6 +18,13 @@ class UserSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['id', 'date_joined', 'role', 'company']
 
+    def to_representation(self, instance):
+        ret = super().to_representation(instance)
+        request = self.context.get('request')
+        if instance.avatar and request:
+            ret['avatar'] = request.build_absolute_uri(instance.avatar.url)
+        return ret
+
 
 class ChangePasswordSerializer(serializers.Serializer):
     """Changement de mot de passe pour l'utilisateur connecté."""
