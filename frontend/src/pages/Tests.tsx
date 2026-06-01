@@ -144,7 +144,14 @@ export default function Tests() {
             className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-800/50"
           >
             <h2 className="font-semibold text-slate-800 dark:text-slate-100">{test.title}</h2>
-            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{test.description || ''}</p>
+            {test.description ? (
+              <p
+                className="mt-1 line-clamp-2 text-sm text-slate-500 dark:text-slate-400"
+                title={test.description}
+              >
+                {test.description}
+              </p>
+            ) : null}
             <p className="mt-2 text-xs text-slate-400 dark:text-slate-500">
               {test.duration_minutes ?? 0} min · {(test.questions?.length ?? 0)} {t('test.question')}(s)
             </p>
