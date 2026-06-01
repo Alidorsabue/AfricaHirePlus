@@ -1,37 +1,51 @@
 import { useState, useEffect, type ReactNode } from 'react'
-import { Link, NavLink } from 'react-router-dom'
+import { Link, NavLink, useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import {
-  LayoutDashboard,
-  Briefcase,
-  GitBranch,
-  Users,
-  FileQuestion,
-  Mail,
-  Building2,
-  Bell,
-} from 'lucide-react'
+import { Bell } from 'lucide-react'
 import UserMenu from './UserMenu'
 import PreferencesModal from './PreferencesModal'
 import { useAuth } from '../contexts/AuthContext'
 import { companiesApi } from '../api/companies'
 import { resolveMediaUrl } from '../api/env'
+import { recruiterNavSections, type NavBadgeKey } from '../config/recruiterNav'
+import { useRecruiterNavBadges } from '../hooks/useRecruiterNavBadges'
 import type { Company } from '../types'
 
-const nav = [
-  { to: '/', icon: LayoutDashboard, key: 'dashboard' },
-  { to: '/jobs', icon: Briefcase, key: 'jobs' },
-  { to: '/pipeline', icon: GitBranch, key: 'pipeline' },
-  { to: '/candidates', icon: Users, key: 'candidates' },
-  { to: '/tests', icon: FileQuestion, key: 'tests' },
-  { to: '/emails', icon: Mail, key: 'emailTemplates' },
-  { to: '/company', icon: Building2, key: 'company' },
-] as const
+function NavBadge({ count, active }: { count: number; active: boolean }) {
+  if (count <= 0) return null
+  return (
+    <span
+      className={`ml-auto flex h-5 min-w-[1.25rem] shrink-0 items-center justify-center rounded-full px-1.5 text-xs font-semibold tabular-nums ${
+        active
+          ? 'bg-teal-600 text-white'
+          : 'bg-slate-700 text-slate-300'
+      }`}
+    >
+      {count > 99 ? '99+' : count}
+    </span>
+  )
+}
+
+function isNavItemActive(
+  pathname: string,
+  to: string,
+  end?: boolean,
+  alsoActiveOn?: string[]
+): boolean {
+  if (alsoActiveOn?.some((p) => pathname === p || pathname.startsWith(`${p}/`))) {
+    return true
+  }
+  if (end) return pathname === to
+  if (to === '/') return pathname === '/'
+  return pathname === to || pathname.startsWith(`${to}/`)
+}
 
 export default function Layout({ children }: { children: ReactNode }) {
   const { t } = useTranslation()
+  const { pathname } = useLocation()
   const [preferencesOpen, setPreferencesOpen] = useState(false)
   const { user } = useAuth()
+  const badges = useRecruiterNavBadges()
   const companyId = user?.company != null ? Number(user.company) : null
   const [company, setCompany] = useState<Company | null>(null)
 
@@ -55,10 +69,14 @@ export default function Layout({ children }: { children: ReactNode }) {
   }, [companyId])
   const companyLogoUrl = resolveMediaUrl(company?.logo)
 
+  const getBadge = (key?: NavBadgeKey): number => {
+    if (!key) return 0
+    return badges[key] ?? 0
+  }
+
   return (
     <div className="flex min-h-screen flex-col bg-slate-50 dark:bg-slate-950">
-      {/* Barre unique au-dessus de toute la page (sidebar incluse) */}
-      <header className="fixed left-0 right-0 top-0 z-50 flex h-16 shrink-0 items-center justify-between gap-4 border-b border-slate-800 bg-slate-900 px-4 shadow-sm dark:border-slate-800 lg:px-6">
+      <header className="fixed left-0 right-0 top-0 z-50 flex h-16 shrink-0 items-center justify-between gap-4 border-b border-slate-800 bg-slate-900 px-4 shadow-sm lg:px-6">
         <div className="flex min-w-0 flex-1 items-center gap-4 sm:gap-6">
           <Link to="/" className="flex shrink-0 items-center gap-2">
             <img
@@ -98,7 +116,7 @@ export default function Layout({ children }: { children: ReactNode }) {
         <div className="flex shrink-0 items-center gap-2">
           <button
             type="button"
-            className="rounded-lg p-2 text-slate-400 hover:bg-slate-800 hover:text-white dark:hover:bg-slate-700"
+            className="rounded-lg p-2 text-slate-400 hover:bg-slate-800 hover:text-white"
             aria-label="Notifications"
           >
             <Bell className="h-5 w-5" />
@@ -108,23 +126,39 @@ export default function Layout({ children }: { children: ReactNode }) {
       </header>
 
       <div className="flex flex-1 pt-16">
-        <aside className="fixed left-0 top-16 z-40 flex h-[calc(100vh-4rem)] w-64 flex-col border-r border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
-          <nav className="flex flex-1 flex-col gap-1 overflow-y-auto p-3">
-            {nav.map(({ to, icon: Icon, key }) => (
-              <NavLink
-                key={to}
-                to={to}
-                className={({ isActive }) =>
-                  `flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
-                    isActive
-                      ? 'bg-teal-50 text-teal-700 dark:bg-teal-900/30 dark:text-teal-300'
-                      : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200'
-                  }`
-                }
-              >
-                <Icon className="h-5 w-5 shrink-0" />
-                {t(`nav.${key}`)}
-              </NavLink>
+        <aside className="fixed left-0 top-16 z-40 flex h-[calc(100vh-4rem)] w-64 flex-col border-r border-slate-800 bg-slate-950">
+          <nav className="flex flex-1 flex-col overflow-y-auto px-2 py-3">
+            {recruiterNavSections.map(({ sectionKey, items }) => (
+              <div key={sectionKey} className="mb-1">
+                <p className="px-3 pb-1.5 pt-3 text-[10px] font-semibold uppercase tracking-wider text-slate-500 first:pt-1">
+                  {t(`nav.${sectionKey}`)}
+                </p>
+                <ul className="flex flex-col gap-0.5">
+                  {items.map(({ to, icon: Icon, labelKey, badgeKey, end, alsoActiveOn }) => {
+                    const active = isNavItemActive(pathname, to, end, alsoActiveOn)
+                    const badgeCount = getBadge(badgeKey)
+                    return (
+                      <li key={to + labelKey}>
+                        <NavLink
+                          to={to}
+                          end={end}
+                          className={() =>
+                            `flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
+                              active
+                                ? 'bg-emerald-200 text-slate-900'
+                                : 'text-slate-400 hover:bg-slate-800/80 hover:text-slate-200'
+                            }`
+                          }
+                        >
+                          <Icon className="h-5 w-5 shrink-0" strokeWidth={active ? 2.25 : 2} />
+                          <span className="min-w-0 flex-1 truncate">{t(`nav.${labelKey}`)}</span>
+                          <NavBadge count={badgeCount} active={active} />
+                        </NavLink>
+                      </li>
+                    )
+                  })}
+                </ul>
+              </div>
             ))}
           </nav>
         </aside>

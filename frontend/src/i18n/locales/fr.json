@@ -1,10 +1,20 @@
 {
   "nav": {
+    "sectionRecruitment": "Recrutement",
+    "sectionEvaluation": "Évaluation",
+    "sectionCommunication": "Communication",
+    "sectionAdministration": "Administration",
     "dashboard": "Tableau de bord",
-    "jobs": "Offres d'emploi",
-    "pipeline": "Pipeline candidats",
+    "jobs": "Offres",
+    "pipeline": "Pipeline",
+    "applications": "Candidatures",
     "candidates": "Candidats",
-    "tests": "Tests techniques",
+    "scoringAts": "Scoring ATS",
+    "tests": "Tests",
+    "shortlist": "Shortlist / Classement",
+    "emails": "Emails",
+    "settings": "Paramètres",
+    "rgpdAudit": "RGPD & Audit",
     "emailTemplates": "Templates emails",
     "company": "Mon entreprise",
     "profile": "Profil",
@@ -12,6 +22,49 @@
     "logout": "Déconnexion",
     "login": "Connexion",
     "register": "Créer un compte"
+  },
+  "applicationsList": {
+    "subtitle": "Toutes les candidatures de votre entreprise.",
+    "empty": "Aucune candidature pour le moment.",
+    "candidate": "Candidat",
+    "job": "Offre",
+    "status": "Statut",
+    "score": "Score ATS"
+  },
+  "scoringAts": {
+    "subtitle": "Scores de présélection par offre (analyse CV vs fiche de poste).",
+    "noJobs": "Aucune offre publiée.",
+    "candidatesScored": "{{scored}} / {{total}} candidats scorés",
+    "openJob": "Voir l'offre",
+    "criteria": "Critères ATS"
+  },
+  "shortlist": {
+    "subtitle": "Classement des candidats par score de présélection.",
+    "selectJob": "Offre d'emploi",
+    "chooseJob": "— Choisir une offre —",
+    "empty": "Aucun candidat classé pour cette offre.",
+    "manageOnJob": "Gérer la shortlist sur la fiche offre →"
+  },
+  "settings": {
+    "subtitle": "Compte, entreprise et préférences d'affichage.",
+    "company": "Mon entreprise",
+    "companyDesc": "Logo, coordonnées et informations légales.",
+    "account": "Mon compte",
+    "accountDesc": "Identité, e-mail et mot de passe.",
+    "preferences": "Préférences",
+    "preferencesDesc": "Langue et thème : menu utilisateur en haut à droite."
+  },
+  "rgpdAudit": {
+    "subtitle": "Conformité RGPD, traçabilité et gestion des données personnelles.",
+    "auditTitle": "Journal d'audit",
+    "auditDesc": "Chaque changement de statut, override ou note est historisé sur la fiche candidature.",
+    "auditLink": "Voir les candidatures →",
+    "anonymizeTitle": "Anonymisation",
+    "anonymizeDesc": "Effacer les données identifiantes d'un candidat tout en conservant les statistiques RH.",
+    "anonymizeLink": "Pool candidats →",
+    "exportTitle": "Portabilité (candidat)",
+    "exportDesc": "Les candidats connectés peuvent exporter leurs données depuis leur espace profil.",
+    "exportNote": "Espace candidat : Mon profil → Export JSON."
   },
   "user": {
     "roleAdmin": "Administrateur",

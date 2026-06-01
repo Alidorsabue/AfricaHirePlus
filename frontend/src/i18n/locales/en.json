@@ -1,10 +1,20 @@
 {
   "nav": {
+    "sectionRecruitment": "Recruitment",
+    "sectionEvaluation": "Evaluation",
+    "sectionCommunication": "Communication",
+    "sectionAdministration": "Administration",
     "dashboard": "Dashboard",
-    "jobs": "Job offers",
-    "pipeline": "Candidate pipeline",
+    "jobs": "Jobs",
+    "pipeline": "Pipeline",
+    "applications": "Applications",
     "candidates": "Candidates",
-    "tests": "Technical tests",
+    "scoringAts": "ATS scoring",
+    "tests": "Tests",
+    "shortlist": "Shortlist / Ranking",
+    "emails": "Emails",
+    "settings": "Settings",
+    "rgpdAudit": "GDPR & Audit",
     "emailTemplates": "Email templates",
     "company": "My company",
     "profile": "Profile",
@@ -12,6 +22,49 @@
     "logout": "Logout",
     "login": "Login",
     "register": "Create account"
+  },
+  "applicationsList": {
+    "subtitle": "All applications for your company.",
+    "empty": "No applications yet.",
+    "candidate": "Candidate",
+    "job": "Job",
+    "status": "Status",
+    "score": "ATS score"
+  },
+  "scoringAts": {
+    "subtitle": "Preselection scores per job (CV vs job description).",
+    "noJobs": "No published jobs.",
+    "candidatesScored": "{{scored}} / {{total}} candidates scored",
+    "openJob": "View job",
+    "criteria": "ATS criteria"
+  },
+  "shortlist": {
+    "subtitle": "Candidate ranking by preselection score.",
+    "selectJob": "Job offer",
+    "chooseJob": "— Select a job —",
+    "empty": "No ranked candidates for this job.",
+    "manageOnJob": "Manage shortlist on job page →"
+  },
+  "settings": {
+    "subtitle": "Account, company and display preferences.",
+    "company": "My company",
+    "companyDesc": "Logo, contact details and legal information.",
+    "account": "My account",
+    "accountDesc": "Identity, email and password.",
+    "preferences": "Preferences",
+    "preferencesDesc": "Language and theme: user menu at top right."
+  },
+  "rgpdAudit": {
+    "subtitle": "GDPR compliance, traceability and personal data management.",
+    "auditTitle": "Audit log",
+    "auditDesc": "Status changes, overrides and notes are logged on each application.",
+    "auditLink": "View applications →",
+    "anonymizeTitle": "Anonymization",
+    "anonymizeDesc": "Remove identifying data while keeping HR statistics.",
+    "anonymizeLink": "Candidate pool →",
+    "exportTitle": "Data portability (candidate)",
+    "exportDesc": "Logged-in candidates can export their data from their profile.",
+    "exportNote": "Candidate area: My profile → JSON export."
   },
   "user": {
     "roleAdmin": "Administrator",

@@ -29,6 +29,11 @@ import TechnicalTest from './pages/TechnicalTest'
 import EmailTemplates from './pages/EmailTemplates'
 import CompanyProfile from './pages/CompanyProfile'
 import ApplicationDetail from './pages/ApplicationDetail'
+import ApplicationsList from './pages/ApplicationsList'
+import ScoringAts from './pages/ScoringAts'
+import ShortlistRanking from './pages/ShortlistRanking'
+import Settings from './pages/Settings'
+import RgpdAudit from './pages/RgpdAudit'
 import MesCandidatures from './pages/MesCandidatures'
 import TestAccess from './pages/TestAccess'
 import OffresCandidat from './pages/OffresCandidat'
@@ -77,7 +82,12 @@ function AppRoutes() {
       <Route path="/jobs/:id" element={<RecruiterRoute><JobDetail /></RecruiterRoute>} />
       <Route path="/jobs/:id/edit" element={<RecruiterRoute><JobForm /></RecruiterRoute>} />
       <Route path="/pipeline" element={<RecruiterRoute><Pipeline /></RecruiterRoute>} />
+      <Route path="/applications" element={<RecruiterRoute><ApplicationsList /></RecruiterRoute>} />
       <Route path="/applications/:id" element={<RecruiterRoute><ApplicationDetail /></RecruiterRoute>} />
+      <Route path="/scoring" element={<RecruiterRoute><ScoringAts /></RecruiterRoute>} />
+      <Route path="/shortlist" element={<RecruiterRoute><ShortlistRanking /></RecruiterRoute>} />
+      <Route path="/settings" element={<RecruiterRoute><Settings /></RecruiterRoute>} />
+      <Route path="/rgpd-audit" element={<RecruiterRoute><RgpdAudit /></RecruiterRoute>} />
       <Route path="/candidates" element={<RecruiterRoute><Candidates /></RecruiterRoute>} />
       <Route path="/candidates/:id" element={<RecruiterRoute><CandidateProfile /></RecruiterRoute>} />
       <Route path="/tests" element={<RecruiterRoute><Tests /></RecruiterRoute>} />
