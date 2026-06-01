@@ -1,21 +1,179 @@
 """
-Services métier candidatures : soumission, détection doublon, get_or_create candidat, workflow (screening + emails), manual override.
+Services métier candidatures : soumission, détection doublon, get_or_create candidat,
+workflow (screening + emails), manual override, transitions de statut auditées.
+
+P10 additions :
+- `transition_status()` : machine d'état + audit log
+- `withdraw_application()` : permet au candidat de retirer sa candidature
+- `record_audit_log()` : helper de journalisation
 """
 import logging
+from typing import Optional
 
+from django.db import transaction
 from django.utils import timezone
 
-from apps.applications.models import Application
+from apps.applications.models import Application, ApplicationAuditLog
 from apps.candidates.models import Candidate
 from apps.jobs.models import JobOffer
 from apps.jobs.services import compute_preselection, compute_screening_score, run_auto_preselection
 from apps.emails.services import send_application_received, send_shortlist_notification
-from apps.core.cv_extraction import extract_text_from_uploaded_file
+from apps.core.cv_extraction import extract_cv
+from apps.core.cv_parser import parse_cv
 
 logger = logging.getLogger(__name__)
 
 # Seuil de score pour présélection automatique (si score >= 60 → statut PRESELECTED)
 SCREENING_THRESHOLD = 60.0
+
+
+# ---------------------------------------------------------------------------
+# P10.4 — Machine d'état des transitions de statut
+# ---------------------------------------------------------------------------
+# Définit explicitement quelles transitions sont autorisées. Toute transition
+# absente est rejetée par `transition_status()`. Cela évite qu'un recruteur
+# fasse passer une candidature de "applied" directement à "hired".
+
+S = Application.Status
+
+ALLOWED_TRANSITIONS: dict[str, set[str]] = {
+    S.APPLIED: {
+        S.PRESELECTED, S.REJECTED_PRESELECTION, S.SHORTLISTED,
+        S.REJECTED, S.WITHDRAWN,
+    },
+    S.PRESELECTED: {
+        S.SHORTLISTED, S.REJECTED_PRESELECTION, S.REJECTED_SELECTION,
+        S.REJECTED, S.WITHDRAWN,
+    },
+    S.REJECTED_PRESELECTION: {
+        # On peut "repêcher" un rejet de présélection (ADD_TO_SHORTLIST)
+        S.SHORTLISTED, S.PRESELECTED,
+    },
+    S.SHORTLISTED: {
+        S.INTERVIEW, S.REJECTED_SELECTION, S.REJECTED, S.WITHDRAWN, S.OFFER,
+    },
+    S.REJECTED_SELECTION: {
+        S.SHORTLISTED, S.INTERVIEW,
+    },
+    S.INTERVIEW: {
+        S.OFFER, S.REJECTED_SELECTION, S.REJECTED, S.WITHDRAWN, S.SHORTLISTED,
+    },
+    S.OFFER: {
+        S.HIRED, S.REJECTED, S.WITHDRAWN, S.INTERVIEW,
+    },
+    S.HIRED: set(),   # terminal
+    S.REJECTED: set(),
+    S.WITHDRAWN: set(),
+}
+
+
+class InvalidStatusTransition(Exception):
+    """Transition de statut interdite par la machine d'état."""
+
+    def __init__(self, from_status: str, to_status: str):
+        self.from_status = from_status
+        self.to_status = to_status
+        super().__init__(
+            f"Transition interdite : {from_status} → {to_status}."
+        )
+
+
+def record_audit_log(
+    application: Application,
+    action: str,
+    *,
+    actor=None,
+    payload_before: dict | None = None,
+    payload_after: dict | None = None,
+    reason: str = '',
+    request=None,
+) -> ApplicationAuditLog:
+    """
+    Crée une entrée d'audit pour une candidature.
+    `request` (optionnel) permet de capter IP + User-Agent.
+    """
+    ip = None
+    ua = ''
+    if request is not None:
+        # IP (xff aware)
+        xff = request.META.get('HTTP_X_FORWARDED_FOR') if hasattr(request, 'META') else None
+        ip = (xff.split(',')[0].strip() if xff else None) or (
+            request.META.get('REMOTE_ADDR') if hasattr(request, 'META') else None
+        )
+        ua = (request.META.get('HTTP_USER_AGENT', '') or '')[:255] if hasattr(request, 'META') else ''
+
+    return ApplicationAuditLog.objects.create(
+        application=application,
+        actor=actor if (actor and getattr(actor, 'is_authenticated', False)) else None,
+        action=action,
+        payload_before=payload_before or {},
+        payload_after=payload_after or {},
+        reason=reason or '',
+        ip_address=ip,
+        user_agent=ua,
+    )
+
+
+def transition_status(
+    application: Application,
+    new_status: str,
+    *,
+    actor=None,
+    reason: str = '',
+    request=None,
+    force: bool = False,
+) -> Application:
+    """
+    Fait passer une candidature à un nouveau statut en respectant la machine d'état
+    (sauf si `force=True`, réservé à `apply_manual_override` / super-admin).
+    Trace l'opération dans `ApplicationAuditLog`.
+    """
+    old_status = application.status
+    if old_status == new_status:
+        return application
+    if not force:
+        allowed = ALLOWED_TRANSITIONS.get(old_status, set())
+        if new_status not in allowed:
+            raise InvalidStatusTransition(old_status, new_status)
+
+    with transaction.atomic():
+        application.status = new_status
+        application.save(update_fields=['status', 'updated_at'])
+        record_audit_log(
+            application,
+            ApplicationAuditLog.Action.STATUS_CHANGE,
+            actor=actor,
+            payload_before={'status': old_status},
+            payload_after={'status': new_status, 'forced': force},
+            reason=reason,
+            request=request,
+        )
+    return application
+
+
+def withdraw_application(
+    application: Application,
+    *,
+    actor=None,
+    reason: str = '',
+    request=None,
+) -> Application:
+    """
+    Permet à un candidat de retirer sa candidature.
+    - Refus si déjà dans un statut terminal (hired/rejected/withdrawn).
+    - Transition forcée vers WITHDRAWN avec audit log.
+    """
+    terminal = {Application.Status.HIRED, Application.Status.REJECTED, Application.Status.WITHDRAWN}
+    if application.status in terminal:
+        raise InvalidStatusTransition(application.status, Application.Status.WITHDRAWN)
+    return transition_status(
+        application,
+        Application.Status.WITHDRAWN,
+        actor=actor,
+        reason=reason or "Retrait par le candidat",
+        request=request,
+        force=True,
+    )
 
 
 def apply_manual_override(
@@ -25,12 +183,23 @@ def apply_manual_override(
     reason: str = '',
     new_status: str | None = None,
     new_score: float | None = None,
+    actor=None,
+    request=None,
 ) -> Application:
     """
     Applique un ajustement manuel sur une candidature.
     Actions : ADD_TO_SHORTLIST, REMOVE_FROM_SHORTLIST, FORCE_STATUS, UPDATE_SCORE.
     Marque is_manually_adjusted = True pour ne plus recalculer ce candidat.
+
+    P10.3 : tout override est tracé dans `ApplicationAuditLog` (avant/après).
     """
+    before = {
+        'status': application.status,
+        'selection_score': application.selection_score,
+        'manually_added_to_shortlist': application.manually_added_to_shortlist,
+        'is_manually_adjusted': application.is_manually_adjusted,
+    }
+
     application.is_manually_adjusted = True
     application.manual_override_reason = reason or application.manual_override_reason or ''
     update_fields = ['is_manually_adjusted', 'manual_override_reason', 'updated_at']
@@ -51,6 +220,27 @@ def apply_manual_override(
         update_fields.append('selection_score')
 
     application.save(update_fields=update_fields)
+
+    after = {
+        'status': application.status,
+        'selection_score': application.selection_score,
+        'manually_added_to_shortlist': application.manually_added_to_shortlist,
+        'is_manually_adjusted': application.is_manually_adjusted,
+        'action': action,
+    }
+    try:
+        record_audit_log(
+            application,
+            ApplicationAuditLog.Action.MANUAL_OVERRIDE,
+            actor=actor,
+            payload_before=before,
+            payload_after=after,
+            reason=reason,
+            request=request,
+        )
+    except Exception as e:
+        logger.warning("audit log manual_override failed for app=%s: %s", application.pk, e)
+
     return application
 
 
@@ -116,13 +306,68 @@ def get_or_create_candidate(
     second_nationality: str = '',
 ) -> Candidate:
     """Récupère ou crée le candidat (unique company + email). Met à jour les champs fournis et lie user si fourni."""
-    # Extraction du texte du CV (PDF/Word) en amont du scoring et de la recherche
+    # Extraction du texte du CV (PDF/Word/ODT/RTF/TXT/Images) — moteur v2 multi-format
+    # avec fallback automatique (pypdf -> pdfminer -> OCR pour les PDF scannés).
     effective_raw_cv_text = raw_cv_text or ''
     if resume:
-        extracted = extract_text_from_uploaded_file(resume)
-        if extracted:
-            effective_raw_cv_text = extracted
-            logger.debug("cv_extraction: %d caractères extraits du CV pour candidat %s", len(extracted), email)
+        name = getattr(resume, 'name', '') or ''
+        ct = getattr(resume, 'content_type', '') or ''
+        extraction = extract_cv(resume, filename=name, content_type=ct)
+        # Reset du pointeur pour permettre la sauvegarde ultérieure du fichier
+        if hasattr(resume, 'seek'):
+            try:
+                resume.seek(0)
+            except Exception:
+                pass
+        if extraction.text:
+            effective_raw_cv_text = extraction.text
+            logger.info(
+                "cv_extraction: candidat=%s méthode=%s chars=%d qualité=%.2f ocr=%s",
+                email, extraction.method.value, len(extraction.text),
+                extraction.quality_score, extraction.ocr_used,
+            )
+        # Remonter les warnings d'extraction (texte trop court, OCR indisponible, format inconnu, etc.)
+        for w in extraction.warnings:
+            logger.warning("cv_extraction warning candidat=%s : %s", email, w)
+        if extraction.quality_score and extraction.quality_score < 0.3:
+            logger.warning(
+                "cv_extraction: qualité faible (%.2f) pour candidat=%s, scoring ML moins fiable",
+                extraction.quality_score, email,
+            )
+
+    # Auto-enrichissement depuis le texte CV : remplit UNIQUEMENT les champs vides
+    # pour ne JAMAIS écraser une donnée saisie par le candidat. Permet de rattraper
+    # les profils où le candidat n'a pas pris le temps de remplir skills/expérience/etc.,
+    # mais dont le CV contient l'information.
+    if effective_raw_cv_text and len(effective_raw_cv_text) >= 100:
+        try:
+            parsed = parse_cv(effective_raw_cv_text)
+            if (not skills) and parsed.skills:
+                skills = parsed.skills
+                logger.info(
+                    "cv_parser: %d skills auto-extraites du CV pour candidat=%s (confiance %.2f)",
+                    len(parsed.skills), email, parsed.confidence.get("skills", 0.0),
+                )
+            if experience_years is None and parsed.experience_years is not None:
+                experience_years = parsed.experience_years
+                logger.info(
+                    "cv_parser: experience_years=%d auto-détecté pour candidat=%s (confiance %.2f)",
+                    parsed.experience_years, email, parsed.confidence.get("experience_years", 0.0),
+                )
+            if (not education_level) and parsed.education_level:
+                education_level = parsed.education_level
+                logger.info(
+                    "cv_parser: education_level=%s auto-détecté pour candidat=%s (confiance %.2f)",
+                    parsed.education_level, email, parsed.confidence.get("education_level", 0.0),
+                )
+            if (not languages) and parsed.languages:
+                languages = parsed.languages
+                logger.info(
+                    "cv_parser: %d langues auto-détectées pour candidat=%s",
+                    len(parsed.languages), email,
+                )
+        except Exception as e:
+            logger.warning("cv_parser: erreur parsing CV candidat=%s : %s", email, e)
 
     candidate = Candidate.objects.filter(company_id=company_id, email__iexact=email).first()
     if candidate:

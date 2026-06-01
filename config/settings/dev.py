@@ -1,11 +1,16 @@
 """
 Settings développement - AfricaHirePlus ATS
 """
-from .base import *  # noqa: F401, F403
+import os
+
+from .base import *  # noqa: F401, F403, E402
 
 DEBUG = True
 
 ALLOWED_HOSTS = ['localhost', '127.0.0.1', '[::1]']
+
+# Frontend local par défaut (Vite/CRA sur 5173 ou 3000)
+FRONTEND_BASE_URL = os.environ.get('FRONTEND_BASE_URL', 'http://localhost:5173').rstrip('/')
 
 # Base de données : PostgreSQL si configuré, sinon SQLite pour dev rapide
 if os.environ.get('POSTGRES_DB'):
@@ -46,10 +51,10 @@ REST_FRAMEWORK['DEFAULT_RENDERER_CLASSES'] = [
 # Logs plus verbeux (app uniquement ; Hugging Face / filelock restent en WARNING)
 LOGGING['root']['level'] = 'DEBUG'
 
-# Email : console en dev (les messages s'affichent dans le terminal)
-# Pour tester un vrai envoi : définir EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend
-# et EMAIL_HOST, EMAIL_HOST_USER, EMAIL_HOST_PASSWORD dans .env
-if os.environ.get('EMAIL_BACKEND'):
-    EMAIL_BACKEND = os.environ.get('EMAIL_BACKEND')
-else:
-    EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+# Email — l'auto-détection est faite dans base.py :
+#   - BREVO_API_KEY défini → BrevoApiBackend (envoi réel)
+#   - EMAIL_HOST défini    → SMTP
+#   - sinon                → console
+# En dev local, sans aucune variable, on garde donc le mode console (les
+# messages s'affichent dans le terminal). Pour tester un vrai envoi Brevo,
+# il suffit de définir BREVO_API_KEY dans .env (clé secrète d'API).

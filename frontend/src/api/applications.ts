@@ -1,5 +1,12 @@
 import { api } from './axios'
-import type { Application, AtsBreakdown, CandidateProfile } from '../types'
+import type {
+  Application,
+  AtsBreakdown,
+  CandidateProfile,
+  CandidateApplication,
+  ApplicationNote,
+  ApplicationAuditLog,
+} from '../types'
 
 /** Réponse GET ma candidature pour une offre (pré-remplir formulaire). */
 export interface MyApplicationByJobResponse {
@@ -41,7 +48,7 @@ export const applicationsApi = {
         : undefined,
     }),
   /** Candidatures du candidat connecté (rôle candidat). */
-  mine: () => api.get<Application[] | { results: Application[] }>('/applications/mine/'),
+  mine: () => api.get<CandidateApplication[] | { results: CandidateApplication[] }>('/applications/mine/'),
   /** Ma candidature pour une offre (par slug ou id) — pour pré-remplir le formulaire. 404 si aucune. */
   getMyApplicationByJob: (params: { job_offer_slug?: string; job_offer_id?: number }) =>
     api.get<MyApplicationByJobResponse>('/applications/my-application/', { params }),
@@ -51,8 +58,36 @@ export const applicationsApi = {
     api.get<AtsBreakdown>(`/applications/${id}/ats-breakdown/`).then((r) => r.data),
   update: (id: number, data: Partial<Application>) =>
     api.patch<Application>(`/applications/${id}/`, data),
-  updateStatus: (id: number, status: string) =>
-    api.patch(`/applications/${id}/status/`, { status }),
+  updateStatus: (id: number, status: string, reason?: string) =>
+    api.patch(`/applications/${id}/status/`, { status, ...(reason ? { reason } : {}) }),
+  /** P10: retrait candidature (candidat). */
+  withdraw: (id: number, reason?: string) =>
+    api.post<{ message: string; application_id: number; status: string }>(
+      `/applications/${id}/withdraw/`,
+      reason ? { reason } : undefined
+    ),
+  /** P10: bulk status (recruteur). */
+  bulkStatus: (payload: { application_ids: number[]; status: string; reason?: string }) =>
+    api.post<{ updated: number[]; errors: Array<{ id: number; detail: string }> }>(
+      '/applications/bulk-status/',
+      payload
+    ),
+  /** P10: notes internes (recruteur). */
+  notes: {
+    list: (applicationId: number) =>
+      api.get<ApplicationNote[] | { results: ApplicationNote[] }>(`/applications/${applicationId}/notes/`),
+    create: (applicationId: number, payload: { body: string; is_pinned?: boolean }) =>
+      api.post<ApplicationNote>(`/applications/${applicationId}/notes/`, payload),
+    update: (noteId: number, payload: Partial<Pick<ApplicationNote, 'body' | 'is_pinned'>>) =>
+      api.patch<ApplicationNote>(`/applications/notes/${noteId}/`, payload),
+    delete: (noteId: number) =>
+      api.delete(`/applications/notes/${noteId}/`),
+  },
+  /** P10: audit log (recruteur). */
+  audit: {
+    list: (applicationId: number) =>
+      api.get<ApplicationAuditLog[] | { results: ApplicationAuditLog[] }>(`/applications/${applicationId}/audit/`),
+  },
   exportExcel: () =>
     api.get('/applications/export/xlsx/', { responseType: 'blob' }),
   exportShortlistedExcel: () =>

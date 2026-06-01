@@ -107,6 +107,11 @@ export interface Candidate {
   location?: string
   country?: string
   skills?: string[]
+  /** P10: tags recruteur (pool candidat) */
+  tags?: string[]
+  /** P10: RGPD anonymisation */
+  is_anonymized?: boolean
+  anonymized_at?: string | null
   created_at?: string
   updated_at?: string
 }
@@ -143,11 +148,20 @@ export type ApplicationStatus =
   | 'rejected'
   | 'withdrawn'
 
-/** Détail d’un critère de score (présélection pondérée). */
+/**
+ * Détail d’un critère de score (présélection pondérée).
+ * - Clés v1 : criterion, passed, weight_awarded (toujours présentes, rétro-compatibles).
+ * - Clés v2 : ratio (0–1 partial credit), category (regroupement), weight_max,
+ *            mandatory (critère bloquant) — optionnelles selon la version du backend.
+ */
 export interface PreselectionScoreDetail {
   criterion?: string
   passed?: boolean
   weight_awarded?: number
+  ratio?: number
+  category?: string
+  weight_max?: number
+  mandatory?: boolean
 }
 
 /** Détail par catégorie (analyse approfondie). */
@@ -202,6 +216,50 @@ export interface Application {
   applied_at: string
   created_at: string
   updated_at: string
+}
+
+/**
+ * P10: version RGPD-safe renvoyée par GET /applications/mine/
+ * (pas de candidate nested, pas de scores internes).
+ */
+export interface CandidateApplication {
+  id: number
+  job_offer: JobOffer | number
+  status: ApplicationStatus
+  cover_letter: string
+  cover_letter_document_url?: string | null
+  applied_at: string
+  created_at: string
+  updated_at: string
+}
+
+/** P10: Note interne de candidature (recruteur). */
+export interface ApplicationNote {
+  id: number
+  application: number
+  author?: number | null
+  author_name?: string
+  author_email?: string
+  body: string
+  is_pinned: boolean
+  created_at: string
+  updated_at: string
+}
+
+/** P10: Audit log de candidature (recruteur). */
+export interface ApplicationAuditLog {
+  id: number
+  application: number
+  actor?: number | null
+  actor_name?: string
+  action: string
+  action_label?: string
+  payload_before: Record<string, unknown>
+  payload_after: Record<string, unknown>
+  reason: string
+  ip_address?: string | null
+  user_agent?: string
+  created_at: string
 }
 
 /** Entrée leaderboard (onglet Présélection) : rang, candidat, score, statut, badge Auto/Manuel */

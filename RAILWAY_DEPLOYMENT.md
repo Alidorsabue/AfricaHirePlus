@@ -49,7 +49,7 @@ Deux façons, une seule suffit :
 
 ### Optionnel (emails, S3, etc.)
 
-- **Emails** : `EMAIL_HOST`, `EMAIL_PORT`, `EMAIL_HOST_USER`, `EMAIL_HOST_PASSWORD`, `DEFAULT_FROM_EMAIL`, etc. (voir `.env.example`).
+- **E-mails** : `EMAIL_HOST`, `EMAIL_PORT`, `EMAIL_USE_TLS`, `EMAIL_USE_SSL`, `EMAIL_HOST_USER`, `EMAIL_HOST_PASSWORD`, `DEFAULT_FROM_EMAIL`, `EMAIL_FROM_DISPLAY_NAME`, `EMAIL_TIMEOUT`, etc. (voir `.env.example` et `docs/CONFIGURATION_SMTP.md`). Vérification : `python manage.py send_test_email --show-config` puis `python manage.py send_test_email vous@email.com`.
 - **Fichiers (S3)** : `USE_S3=true`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_STORAGE_BUCKET_NAME`, etc.
 - **Log fichier** : laisser `LOG_FILE` non défini sur Railway (logs = console uniquement). Si vous avez un volume, vous pouvez définir `LOG_FILE=/chemin/vers/django.log`.
 

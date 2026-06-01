@@ -14,6 +14,11 @@ const TEMPLATE_TYPES = [
   'interview_invitation',
   'offer_letter',
   'test_invitation',
+  // P9: nouveaux templates système
+  'test_submitted',
+  'test_expired',
+  'corrector_invitation',
+  'corrector_revoked',
   'reminder',
   'custom',
 ] as const

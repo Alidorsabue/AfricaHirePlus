@@ -17,6 +17,7 @@ import { unwrapList } from '../api/utils'
 import type { Application, ApplicationStatus } from '../types'
 import { PipelineColumn } from '../components/PipelineColumn'
 import { ApplicationCard } from '../components/ApplicationCard'
+import { useToast } from '../contexts/ToastContext'
 
 const STATUSES: ApplicationStatus[] = [
   'applied',
@@ -55,6 +56,7 @@ function downloadBlob(blob: Blob, filename: string) {
 export default function Pipeline() {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
+  const { toast } = useToast()
   const [jobFilter, setJobFilter] = useState<number | ''>('')
   const [activeId, setActiveId] = useState<number | null>(null)
 
@@ -73,6 +75,11 @@ export default function Pipeline() {
       applicationsApi.updateStatus(id, status),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['applications'] })
+      toast.success(t('common.saved') || 'Enregistré.')
+    },
+    onError: (err: unknown) => {
+      const msg = (err as { response?: { data?: { error?: { message?: string } } } })?.response?.data?.error?.message
+      toast.error(msg || t('pipeline.transitionDenied') || 'Transition refusée.')
     },
   })
 

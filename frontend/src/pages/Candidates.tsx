@@ -69,6 +69,26 @@ export default function Candidates() {
                       {c.first_name} {c.last_name}
                     </span>
                     <span className="ml-2 text-slate-500">{c.email}</span>
+                    {c.is_anonymized && (
+                      <span className="ml-2 rounded bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">
+                        {t('candidate.anonymized') || 'Anonymisé'}
+                      </span>
+                    )}
+                    {Array.isArray(c.tags) && c.tags.length > 0 && (
+                      <div className="mt-1 flex flex-wrap gap-1">
+                        {c.tags.slice(0, 3).map((tag) => (
+                          <span
+                            key={tag}
+                            className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600"
+                          >
+                            {tag}
+                          </span>
+                        ))}
+                        {c.tags.length > 3 && (
+                          <span className="text-xs text-slate-400">+{c.tags.length - 3}</span>
+                        )}
+                      </div>
+                    )}
                   </div>
                   <div className="text-sm text-slate-500">
                     {c.current_position || '—'} · {c.country || '—'}

@@ -5,7 +5,7 @@
 import { useState, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   User,
   ChevronDown,
@@ -24,6 +24,15 @@ import { useAuth } from '../contexts/AuthContext'
 import { resolveMediaUrl } from '../api/env'
 import { candidatesApi } from '../api/candidates'
 import type { CandidateProfile } from '../types'
+import { useToast } from '../contexts/ToastContext'
+
+function downloadBlob(blob: Blob, filename: string) {
+  const a = document.createElement('a')
+  a.href = URL.createObjectURL(blob)
+  a.download = filename
+  a.click()
+  URL.revokeObjectURL(a.href)
+}
 
 function Section({
   title,
@@ -58,6 +67,8 @@ function Section({
 export default function MonProfil() {
   const { t } = useTranslation()
   const { user } = useAuth()
+  const { toast } = useToast()
+  const queryClient = useQueryClient()
   const [openPersonal, setOpenPersonal] = useState(true)
   const [openEducation, setOpenEducation] = useState(false)
   const [openExperience, setOpenExperience] = useState(false)
@@ -72,6 +83,31 @@ export default function MonProfil() {
   const profile = profileRes?.data as CandidateProfile | undefined
   const hasProfile = profile && typeof profile === 'object'
   const avatarUrl = useMemo(() => resolveMediaUrl(user?.avatar), [user?.avatar])
+
+  const exportMutation = useMutation({
+    mutationFn: async () => (await candidatesApi.exportMe()).data as Blob,
+    onSuccess: (blob) => {
+      downloadBlob(blob, 'mes-donnees-candidat.json')
+      toast.success(t('candidat.exportSuccess') || 'Export téléchargé.')
+    },
+    onError: () => {
+      toast.error(t('candidat.exportError') || 'Impossible de télécharger l’export.')
+    },
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: async () => (await candidatesApi.deleteMe()).data,
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['candidateProfile'] })
+      toast.success(
+        t('candidat.anonymizeSuccess') ||
+          'Vos données ont été anonymisées (RGPD).'
+      )
+    },
+    onError: () => {
+      toast.error(t('candidat.anonymizeError') || 'Impossible d’anonymiser vos données.')
+    },
+  })
 
   if (isLoading) {
     return (
@@ -110,6 +146,32 @@ export default function MonProfil() {
         {t('candidat.monProfil')}
       </h1>
       <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">{t('candidat.monProfilHint')}</p>
+
+      <div className="mt-4 flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          onClick={() => exportMutation.mutate()}
+          disabled={exportMutation.isPending}
+          className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+        >
+          {exportMutation.isPending ? (t('common.loading') || '...') : (t('candidat.exportMyData') || 'Exporter mes données')}
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            const ok = window.confirm(
+              t('candidat.anonymizeConfirm') ||
+                'Voulez-vous anonymiser vos données (RGPD) ? Cette action est irréversible.'
+            )
+            if (!ok) return
+            deleteMutation.mutate()
+          }}
+          disabled={deleteMutation.isPending}
+          className="rounded-lg border border-red-200 bg-white px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-50 disabled:opacity-50 dark:border-red-900/50 dark:bg-slate-900/20 dark:text-red-300 dark:hover:bg-red-900/20"
+        >
+          {deleteMutation.isPending ? (t('common.loading') || '...') : (t('candidat.anonymizeMe') || 'Anonymiser mes données')}
+        </button>
+      </div>
 
       <div className="mt-8 flex flex-col items-center gap-6 sm:flex-row sm:items-start">
         <Link

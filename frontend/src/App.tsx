@@ -34,6 +34,7 @@ import TestAccess from './pages/TestAccess'
 import OffresCandidat from './pages/OffresCandidat'
 import MonProfil from './pages/MonProfil'
 import UserProfile from './pages/UserProfile'
+import CorrectorPortal from './pages/CorrectorPortal'
 import ProtectedRoute from './components/ProtectedRoute'
 import './i18n'
 
@@ -53,6 +54,11 @@ function AppRoutes() {
       <Route path="/login" element={user ? <Navigate to="/" replace /> : <Login />} />
       <Route path="/register" element={user ? <Navigate to="/" replace /> : <RegisterCompany />} />
       <Route path="/register/candidate" element={<RegisterCandidate />} />
+      {/*
+        Portail correcteur (P8) — accès via lien magique : `/correct?token=…`.
+        Pas d'auth JWT, le token est validé par l'API via header X-Corrector-Token.
+       */}
+      <Route path="/correct" element={<CorrectorPortal />} />
       {/* Profil compte utilisateur (tous rôles) */}
       <Route path="/profil" element={<ProtectedRoute><UserProfile /></ProtectedRoute>} />
       {/* Offres publiques (sans auth) : détail offre, formulaire de candidature */}

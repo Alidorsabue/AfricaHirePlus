@@ -95,6 +95,21 @@ class Candidate(SoftDeleteMixin, TimeStampedMixin, models.Model):
         ),
     )
 
+    # P10.9 — tags / labels libres (mots-clés recruteur) — visibles recruteur uniquement
+    tags = models.JSONField(
+        default=list,
+        blank=True,
+        help_text='Tags libres pour le pool (ex: "top-talent", "rappeler 2025-03").',
+    )
+
+    # P10.7 — RGPD : marqueurs d'anonymisation (suppression douce conforme art.17)
+    is_anonymized = models.BooleanField(
+        default=False,
+        db_index=True,
+        help_text='Candidat anonymisé (RGPD) : les champs identifiants sont vidés.',
+    )
+    anonymized_at = models.DateTimeField(null=True, blank=True)
+
     class Meta:
         db_table = 'candidates_candidate'
         verbose_name = 'Candidat'
@@ -104,6 +119,9 @@ class Candidate(SoftDeleteMixin, TimeStampedMixin, models.Model):
             models.Index(fields=['company', 'email']),
             models.Index(fields=['company', 'deleted_at']),
             models.Index(fields=['country', 'experience_years']),
+            models.Index(fields=['company', 'is_anonymized']),
+            models.Index(fields=['company', 'created_at']),
+            models.Index(fields=['company', 'updated_at']),
         ]
 
     def __str__(self):
@@ -112,3 +130,42 @@ class Candidate(SoftDeleteMixin, TimeStampedMixin, models.Model):
     def get_full_name(self):
         """Retourne prénom + nom ou email si vide."""
         return f'{self.first_name} {self.last_name}'.strip() or self.email
+
+    def save(self, *args, **kwargs):
+        """P10.6 — Normalise l'email en lowercase pour vraie unicité case-insensitive."""
+        if self.email:
+            self.email = self.email.strip().lower()
+        super().save(*args, **kwargs)
+
+    def anonymize(self):
+        """
+        P10.7 RGPD — Anonymise un candidat (droit à l'effacement).
+        Vide les identifiants directs mais conserve le candidat pour l'historique
+        de ses candidatures (statuts, scores agrégés) à des fins légales / stats.
+        """
+        from django.utils import timezone as _tz
+        self.first_name = '(anonymisé)'
+        self.last_name = ''
+        self.email = f'anonymized-{self.pk}@example.invalid'
+        self.phone = ''
+        self.preferred_name = ''
+        self.date_of_birth = None
+        self.address = ''
+        self.address_line2 = ''
+        self.postcode = ''
+        self.cell_number = ''
+        self.linkedin_url = ''
+        self.portfolio_url = ''
+        self.summary = ''
+        self.raw_cv_text = ''
+        self.references = []
+        if self.resume:
+            try:
+                self.resume.delete(save=False)
+            except Exception:
+                pass
+            self.resume = None
+        self.is_anonymized = True
+        self.anonymized_at = _tz.now()
+        self.user = None
+        self.save()

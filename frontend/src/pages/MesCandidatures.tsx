@@ -1,11 +1,12 @@
 import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Briefcase, ClipboardList, Play } from 'lucide-react'
 import { applicationsApi } from '../api/applications'
 import { testsApi } from '../api/tests'
 import { unwrapList } from '../api/utils'
-import type { Application } from '../types'
+import type { CandidateApplication } from '../types'
+import { useToast } from '../contexts/ToastContext'
 
 const STATUS_KEYS: Record<string, string> = {
   applied: 'pipeline.applied',
@@ -28,6 +29,8 @@ function getStatusLabel(status: string, t: (k: string) => string): string {
 
 export default function MesCandidatures() {
   const { t } = useTranslation()
+  const { toast } = useToast()
+  const queryClient = useQueryClient()
   const { data: rawData, isLoading } = useQuery({
     queryKey: ['applications', 'mine'],
     queryFn: async () => (await applicationsApi.mine()).data,
@@ -36,8 +39,20 @@ export default function MesCandidatures() {
     queryKey: ['tests', 'available-for-candidate'],
     queryFn: async () => (await testsApi.availableForCandidate()).data,
   })
-  const applications = unwrapList(rawData) as Application[]
+  const applications = unwrapList(rawData) as CandidateApplication[]
   const availableTests = Array.isArray(availableTestsData) ? availableTestsData : []
+
+  const withdrawMutation = useMutation({
+    mutationFn: ({ id, reason }: { id: number; reason?: string }) =>
+      applicationsApi.withdraw(id, reason),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['applications', 'mine'] })
+      toast.success(t('candidat.withdrawSuccess') || 'Candidature retirée.')
+    },
+    onError: () => {
+      toast.error(t('candidat.withdrawError') || 'Impossible de retirer la candidature.')
+    },
+  })
 
   if (isLoading) {
     return (
@@ -139,14 +154,33 @@ export default function MesCandidatures() {
                       </span>
                     </div>
                   </div>
-                  {slug && (
-                    <Link
-                      to={`/offres/${slug}`}
-                      className="shrink-0 text-sm font-medium text-teal-600 hover:underline dark:text-teal-400"
-                    >
-                      {t('candidat.viewOffer')}
-                    </Link>
-                  )}
+                  <div className="flex shrink-0 flex-wrap items-center gap-3">
+                    {slug && (
+                      <Link
+                        to={`/offres/${slug}`}
+                        className="text-sm font-medium text-teal-600 hover:underline dark:text-teal-400"
+                      >
+                        {t('candidat.viewOffer')}
+                      </Link>
+                    )}
+                    {app.status !== 'withdrawn' && app.status !== 'rejected' && app.status !== 'hired' && (
+                      <button
+                        type="button"
+                        disabled={withdrawMutation.isPending}
+                        onClick={() => {
+                          const ok = window.confirm(
+                            t('candidat.withdrawConfirm') ||
+                              'Voulez-vous retirer cette candidature ? Cette action est irréversible.'
+                          )
+                          if (!ok) return
+                          withdrawMutation.mutate({ id: app.id })
+                        }}
+                        className="rounded-lg border border-red-200 bg-white px-3 py-1.5 text-sm font-medium text-red-700 hover:bg-red-50 disabled:opacity-50 dark:border-red-900/50 dark:bg-slate-900/20 dark:text-red-300 dark:hover:bg-red-900/20"
+                      >
+                        {withdrawMutation.isPending ? (t('common.loading') || '...') : (t('candidat.withdraw') || 'Retirer')}
+                      </button>
+                    )}
+                  </div>
                 </div>
               </li>
             )

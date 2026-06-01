@@ -18,13 +18,31 @@ openpyxl>=3.1,<4.0
 # Export PDF rapports
 reportlab>=4.0,<5.0
 
-# Extraction texte CV (PDF / Word) pour recherche et scoring
+# Extraction texte CV — moteur multi-format v2 (PDF, DOCX, DOC, ODT, RTF, TXT, Images)
+# Cœur (toujours requis)
 pypdf>=4.0,<6.0
 python-docx>=1.0,<2.0
+
+# Extras CV optionnels — sans eux, le moteur tombe en fallback et journalise un warning
+# (les imports sont lazy : pas de crash si absents). À installer selon les besoins :
+pdfminer.six>=20221105     # fallback PDF complexes (colonnes, mise en page)
+docx2txt>=0.8              # support .doc (Word legacy binaire)
+odfpy>=1.4,<2.0            # support .odt (OpenDocument)
+striprtf>=0.0.26           # support .rtf
+# OCR (PDF scannés + images CV) — requiert Tesseract installé sur le système
+#   Windows : https://github.com/UB-Mannheim/tesseract/wiki
+#   Linux   : apt-get install tesseract-ocr tesseract-ocr-fra tesseract-ocr-eng
+#   macOS   : brew install tesseract tesseract-lang
+pdf2image>=1.16,<2.0       # rasterisation PDF (requiert poppler)
+pytesseract>=0.3.10,<1.0   # binding Python Tesseract
 
 # Analyse sémantique et matching automatique (TF-IDF + similarité cosinus + embeddings)
 scikit-learn>=1.3,<2.0
 sentence-transformers>=2.2,<3.0
+
+# Matching tolérant : fuzzy matching haute performance (10–100× plus rapide que difflib)
+# Utilisé pour la résistance aux fautes de frappe sur les compétences et mots-clés CV/JD.
+rapidfuzz>=3.5,<4.0
 
 # Sécurité & perf
 gunicorn>=21.0,<23.0

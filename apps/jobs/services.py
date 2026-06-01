@@ -192,8 +192,7 @@ def run_auto_preselection(application: Application, threshold: float | None = No
                 application.status = Application.Status.PRESELECTED
                 application.save(update_fields=['status', 'updated_at'])
                 return True
-            application.status = Application.Status.REJECTED_PRESELECTION
-            application.save(update_fields=['status', 'updated_at'])
+            _apply_status_with_safety_net(application, score_f, threshold)
             return False
         except Exception as e:
             logger.warning("run_auto_preselection: fallback ATS failed application_id=%s: %s", application.id, e)
@@ -205,9 +204,31 @@ def run_auto_preselection(application: Application, threshold: float | None = No
         application.status = Application.Status.PRESELECTED
         application.save(update_fields=['status', 'updated_at'])
         return True
-    application.status = Application.Status.REJECTED_PRESELECTION
-    application.save(update_fields=['status', 'updated_at'])
+    _apply_status_with_safety_net(application, float(score), threshold)
     return False
+
+
+def _apply_status_with_safety_net(application: Application, score: float, threshold: float) -> None:
+    """
+    Applique REJECTED_PRESELECTION sauf si le safety net détecte un risque de faux négatif
+    (CV mal extrait, profil très incomplet, 0 keyword matché malgré skills saisis…).
+    Dans ce cas on garde APPLIED pour permettre une revue manuelle par le RH.
+    """
+    try:
+        from ml.feature_engineering import needs_human_review
+        review_needed, reasons = needs_human_review(application)
+    except Exception as e:
+        logger.warning("safety_net: needs_human_review error app=%s: %s", application.id, e)
+        review_needed, reasons = False, []
+    if review_needed:
+        logger.warning(
+            "safety_net: app=%s score=%.2f < seuil=%.2f → REVUE MANUELLE (au lieu de rejet auto). Raisons: %s",
+            application.id, score, threshold, " | ".join(reasons),
+        )
+        application.status = Application.Status.APPLIED
+    else:
+        application.status = Application.Status.REJECTED_PRESELECTION
+    application.save(update_fields=['status', 'updated_at'])
 
 
 def compute_preselection(application: Application) -> float | None:
@@ -229,7 +250,18 @@ def compute_preselection(application: Application) -> float | None:
         score_f = result['total_score']
         application.screening_score = None
         application.preselection_score = score_f
+        # Compatibilité v1/v2 : on persiste la liste plate `details`. Chaque item v2 inclut
+        # déjà les enrichissements (ratio, category, weight_max, mandatory). Les agrégats
+        # `confidence`/`categories` restent dans les logs (audit RH) — non persistés ici
+        # pour ne pas casser le contrat JSON existant côté frontend.
         application.preselection_score_details = result.get('details')
+        logger.info(
+            "compute_preselection v2: app=%s confidence=%.2f mandatory_failed=%s categories=%s",
+            application.id,
+            result.get('confidence', 0.0),
+            result.get('mandatory_failed', False),
+            list((result.get('categories') or {}).keys()),
+        )
     else:
         score = compute_screening_score(application)
         if score is None:
@@ -255,12 +287,14 @@ def compute_preselection(application: Application) -> float | None:
             application.preselection_score_details = None
 
     application.save(update_fields=['screening_score', 'preselection_score', 'preselection_score_details', 'updated_at'])
-    # Toujours aligner le statut sur le score vs seuil (offre ouverte ou clôturée)
+    # Toujours aligner le statut sur le score vs seuil (offre ouverte ou clôturée).
+    # Safety net : un score < seuil + CV mal extrait/profil incomplet → revue manuelle
+    # (statut APPLIED) plutôt que rejet auto (REJECTED_PRESELECTION).
     if score_f >= threshold:
         application.status = Application.Status.PRESELECTED
+        application.save(update_fields=['status', 'updated_at'])
     else:
-        application.status = Application.Status.REJECTED_PRESELECTION
-    application.save(update_fields=['status', 'updated_at'])
+        _apply_status_with_safety_net(application, score_f, threshold)
     return score_f
 
 

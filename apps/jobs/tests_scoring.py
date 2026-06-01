@@ -126,6 +126,7 @@ class ScoringEngineTestCase(TestCase):
             self.assertIn(d['criterion'], ('years_experience', 'education_level', 'experience_years'))
 
     def test_compute_weighted_score_partial_pass(self):
+        """v2 : scoring graduel. exp=2 vs requis>=5 → ratio 0.4 ; equals → 0. Total = 20."""
         self.candidate.experience_years = 2
         self.candidate.education_level = 'Licence'
         self.candidate.save()
@@ -136,10 +137,26 @@ class ScoringEngineTestCase(TestCase):
             ],
         }
         result = compute_weighted_score(self.application, criteria)
-        self.assertEqual(result['total_score'], 0.0)
+        self.assertEqual(result['total_score'], 20.0)
         self.assertEqual(len(result['details']), 2)
         for d in result['details']:
             self.assertFalse(d['passed'])
+        # Le ratio reflète le partial credit
+        exp_detail = next(d for d in result['details'] if d['criterion'] == 'experience_years')
+        self.assertAlmostEqual(exp_detail['ratio'], 0.4, places=2)
+        self.assertEqual(exp_detail['weight_awarded'], 20.0)
+
+    def test_compute_weighted_score_partial_disabled(self):
+        """Rétro-compatibilité v1 : partial=False désactive le scoring graduel."""
+        self.candidate.experience_years = 2
+        self.candidate.save()
+        criteria = {
+            'criteria': [
+                {'field': 'experience_years', 'operator': '>=', 'value': 5, 'weight': 100, 'partial': False},
+            ],
+        }
+        result = compute_weighted_score(self.application, criteria)
+        self.assertEqual(result['total_score'], 0.0)
 
     def test_mandatory_fail_zero_score(self):
         criteria = {
@@ -190,14 +207,15 @@ class ScoringEngineTestCase(TestCase):
             self.assertTrue(d['passed'], d)
 
     def test_interpretability_details(self):
-        """Retour total_score + details pour transparence RH."""
+        """Retour total_score + details pour transparence RH (clés v1 + enrichissements v2)."""
         criteria = {
             'criteria': [
-                {'field': 'experience_years', 'operator': '>=', 'value': 5, 'weight': 60},
-                {'field': 'education_level', 'operator': 'equals', 'value': 'Master', 'weight': 40},
+                {'field': 'experience_years', 'operator': '>=', 'value': 5, 'weight': 60, 'category': 'experience'},
+                {'field': 'education_level', 'operator': 'equals', 'value': 'Master', 'weight': 40, 'category': 'education'},
             ],
         }
         result = compute_weighted_score(self.application, criteria)
+        # Clés v1 (rétro-compatibilité)
         self.assertIn('total_score', result)
         self.assertIn('details', result)
         self.assertEqual(result['total_score'], 100.0)
@@ -207,6 +225,91 @@ class ScoringEngineTestCase(TestCase):
             ['experience_years', 'education_level'],
         )
         self.assertEqual([d['weight_awarded'] for d in result['details']], [60.0, 40.0])
+        # Enrichissements v2
+        self.assertIn('confidence', result)
+        self.assertIn('categories', result)
+        self.assertIn('mandatory_failed', result)
+        self.assertEqual(result['confidence'], 1.0)
+        self.assertFalse(result['mandatory_failed'])
+        for d in result['details']:
+            self.assertIn('ratio', d)
+            self.assertIn('category', d)
+            self.assertIn('weight_max', d)
+            self.assertIn('mandatory', d)
+        self.assertIn('experience', result['categories'])
+        self.assertIn('education', result['categories'])
+        self.assertEqual(result['categories']['experience']['score'], 100.0)
+
+
+class ScoringEngineV2OperatorsTestCase(TestCase):
+    """Tests des opérateurs v2 : range, similar_to, skills_match."""
+
+    def setUp(self):
+        self.company = Company.objects.create(name='V2 Co')
+        self.user = User.objects.create_user(
+            username='v2@test.com', email='v2@test.com', password='x', company=self.company,
+        )
+        self.job = JobOffer.objects.create(
+            company=self.company, title='J', slug='j-v2',
+            description='D', status=JobOffer.Status.PUBLISHED, created_by=self.user,
+        )
+        self.candidate = Candidate.objects.create(
+            company=self.company, email='v2c@test.com',
+            first_name='V', last_name='C',
+            experience_years=4,
+            education_level='Master',
+            skills=['Python', 'Django', 'PostgreSQL'],
+            summary='Developer',
+        )
+        self.application = Application.objects.create(
+            job_offer=self.job, candidate=self.candidate,
+            status=Application.Status.APPLIED,
+        )
+
+    def test_operator_range_inside(self):
+        criteria = {'criteria': [
+            {'field': 'experience_years', 'operator': 'range', 'value': [3, 7], 'weight': 100},
+        ]}
+        result = compute_weighted_score(self.application, criteria)
+        self.assertEqual(result['total_score'], 100.0)
+        self.assertTrue(result['details'][0]['passed'])
+
+    def test_operator_range_partial(self):
+        """exp=4, range [10,20], partial → distance/span = 6/10 → ratio 0.4."""
+        criteria = {'criteria': [
+            {'field': 'experience_years', 'operator': 'range', 'value': [10, 20], 'weight': 100},
+        ]}
+        result = compute_weighted_score(self.application, criteria)
+        self.assertFalse(result['details'][0]['passed'])
+        self.assertAlmostEqual(result['details'][0]['ratio'], 0.4, places=2)
+
+    def test_operator_skills_match(self):
+        """3 compétences requises, 2 matchent → ratio 2/3 ≈ 0.67 → passe le min_match=0.5."""
+        criteria = {'criteria': [
+            {'field': 'skills', 'operator': 'skills_match',
+             'value': ['Python', 'Django', 'React'], 'weight': 100, 'min_match': 0.5},
+        ]}
+        result = compute_weighted_score(self.application, criteria)
+        self.assertTrue(result['details'][0]['passed'])
+        self.assertAlmostEqual(result['details'][0]['ratio'], 2 / 3, places=2)
+
+    def test_operator_similar_to(self):
+        """summary 'Developer' similar_to 'Developper' (faute de frappe) → ratio élevé."""
+        criteria = {'criteria': [
+            {'field': 'summary', 'operator': 'similar_to',
+             'value': 'Developper', 'weight': 100, 'threshold': 0.75},
+        ]}
+        result = compute_weighted_score(self.application, criteria)
+        self.assertTrue(result['details'][0]['passed'])
+        self.assertGreater(result['details'][0]['ratio'], 0.75)
+
+    def test_validate_criteria_accepts_v2_operators(self):
+        """Les nouveaux opérateurs ne doivent pas être rejetés par le validateur."""
+        validate_criteria_json({'criteria': [
+            {'field': 'experience_years', 'operator': 'range', 'value': [1, 10], 'weight': 30},
+            {'field': 'summary', 'operator': 'similar_to', 'value': 'Dev', 'weight': 30},
+            {'field': 'skills', 'operator': 'skills_match', 'value': ['Python'], 'weight': 40},
+        ]})
 
 
 class PreselectionIntegrationTestCase(TestCase):
@@ -264,6 +367,24 @@ class PreselectionIntegrationTestCase(TestCase):
             self.assertIn('weight_awarded', d)
 
     def test_preselection_below_threshold_rejected(self):
+        """Avec partial=False, le candidat sous le seuil obtient 0 et est rejeté (comportement v1)."""
+        PreselectionSettings.objects.create(
+            job_offer=self.job,
+            score_threshold=80.0,
+            criteria_json={
+                'criteria': [
+                    {'field': 'experience_years', 'operator': '>=', 'value': 10, 'weight': 100, 'partial': False},
+                ],
+            },
+        )
+        score = compute_preselection(self.application)
+        self.assertIsNotNone(score)
+        self.assertEqual(score, 0.0)
+        self.application.refresh_from_db()
+        self.assertEqual(self.application.status, Application.Status.REJECTED_PRESELECTION)
+
+    def test_preselection_partial_credit_below_threshold_still_rejected(self):
+        """v2 : partial=True donne du crédit partiel mais le statut reste REJECTED si < seuil."""
         PreselectionSettings.objects.create(
             job_offer=self.job,
             score_threshold=80.0,
@@ -273,9 +394,9 @@ class PreselectionIntegrationTestCase(TestCase):
                 ],
             },
         )
+        # candidate.experience_years = 5 (setUp) → ratio 0.5 → score 50.0
         score = compute_preselection(self.application)
-        self.assertIsNotNone(score)
-        self.assertEqual(score, 0.0)
+        self.assertEqual(score, 50.0)
         self.application.refresh_from_db()
         self.assertEqual(self.application.status, Application.Status.REJECTED_PRESELECTION)
 

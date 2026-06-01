@@ -8,17 +8,28 @@ from openpyxl import Workbook
 from rest_framework import generics, status
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.throttling import ScopedRateThrottle
 from django_filters.rest_framework import DjangoFilterBackend
 
-from .models import Application, MLScore
+from .models import Application, MLScore, ApplicationNote, ApplicationAuditLog
 from .serializers import (
     ApplicationSerializer,
     ApplicationWriteSerializer,
     ApplicationWithCvSerializer,
     ApplicationStatusUpdateSerializer,
+    ApplicationCandidateSerializer,
+    ApplicationNoteSerializer,
+    ApplicationAuditLogSerializer,
     PublicApplySerializer,
 )
-from .services import submit_application, apply_manual_override, job_accepts_applications
+from .services import (
+    submit_application,
+    apply_manual_override,
+    job_accepts_applications,
+    transition_status,
+    InvalidStatusTransition,
+    withdraw_application,
+)
 from apps.jobs.services import run_auto_preselection, refresh_preselection_scores_for_job
 from apps.jobs.models import JobOffer, PreselectionSettings
 from apps.emails.services import send_rejection_notification
@@ -71,8 +82,12 @@ class ApplicationListCreateView(generics.ListCreateAPIView):
 
 
 class MyApplicationsListView(generics.ListAPIView):
-    """Liste des candidatures du candidat connecté (rôle candidat)."""
-    serializer_class = ApplicationSerializer
+    """
+    Liste des candidatures du candidat connecté (rôle candidat).
+    P10.7 RGPD : retourne `ApplicationCandidateSerializer` qui MASQUE les champs
+    internes (scores détaillés, notes recruteur, raisons d'override, etc.).
+    """
+    serializer_class = ApplicationCandidateSerializer
     permission_classes = [IsAuthenticated, IsCandidate]
 
     def get_queryset(self):
@@ -135,9 +150,17 @@ class MyApplicationByJobView(generics.GenericAPIView):
 
 
 class ApplicationDetailView(generics.RetrieveUpdateDestroyAPIView):
-    """Détail, modification et suppression d'une candidature (scope tenant)."""
-    serializer_class = ApplicationSerializer
+    """
+    Détail, modification et suppression d'une candidature (scope tenant).
+    P10.1 : GET utilise le sérializer de lecture complet ; PATCH/PUT utilisent
+    le `ApplicationWriteSerializer` (scores / overrides en read-only).
+    """
     permission_classes = [IsTenantOrSuperAdmin]
+
+    def get_serializer_class(self):
+        if self.request.method in ('PATCH', 'PUT'):
+            return ApplicationWriteSerializer
+        return ApplicationSerializer
 
     def get_queryset(self):
         qs = Application.objects.select_related('job_offer', 'candidate', 'job_offer__company')
@@ -170,9 +193,12 @@ class ApplicationAtsBreakdownView(generics.RetrieveAPIView):
 
 
 class PublicApplyView(generics.GenericAPIView):
-    """Postuler à une offre (connexion requise). Profil candidat lié au compte."""
+    """Postuler à une offre (connexion requise). Profil candidat lié au compte.
+    P10.8 — throttle `public_apply` (10/heure par défaut)."""
     serializer_class = PublicApplySerializer
     permission_classes = [IsAuthenticated]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'public_apply'
 
     def post(self, request):
         serializer = self.get_serializer(data=request.data)
@@ -257,7 +283,10 @@ class PublicApplyView(generics.GenericAPIView):
 
 
 class ApplicationStatusUpdateView(generics.GenericAPIView):
-    """Mise à jour manuelle du statut (applied → preselected → shortlisted → rejected)."""
+    """
+    Mise à jour manuelle du statut (workflow contrôlé par machine d'état).
+    Toute transition est validée + tracée dans ApplicationAuditLog.
+    """
     permission_classes = [IsTenantOrSuperAdmin]
 
     def get_queryset(self):
@@ -274,9 +303,19 @@ class ApplicationStatusUpdateView(generics.GenericAPIView):
         ser = ApplicationStatusUpdateSerializer(data=request.data, partial=True)
         ser.is_valid(raise_exception=True)
         new_status = ser.validated_data['status']
-        app.status = new_status
-        app.save(update_fields=['status', 'updated_at'])
-        # Envoi email de refus si statut passé à rejected
+        reason = (request.data.get('reason') or '').strip()
+        # Super-admin peut forcer (utile pour corrections data), recruteur classique non
+        force = bool(getattr(request.user, 'is_super_admin', False))
+        try:
+            transition_status(
+                app, new_status, actor=request.user, reason=reason, request=request, force=force,
+            )
+        except InvalidStatusTransition as e:
+            return Response(
+                {'status': f'Transition interdite : {e.from_status} → {e.to_status}.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        app.refresh_from_db()
         if new_status == Application.Status.REJECTED:
             try:
                 send_rejection_notification(
@@ -286,8 +325,42 @@ class ApplicationStatusUpdateView(generics.GenericAPIView):
                     job_title=app.job_offer.title,
                 )
             except Exception:
-                pass
+                logger.warning("rejection email failed for app=%s", app.pk, exc_info=True)
         return Response(ApplicationSerializer(app).data)
+
+
+class MyApplicationWithdrawView(generics.GenericAPIView):
+    """
+    POST /applications/<id>/withdraw/  (candidat uniquement)
+    Permet au candidat connecté de retirer sa candidature. Trace dans l'audit log.
+    """
+    permission_classes = [IsAuthenticated, IsCandidate]
+
+    def post(self, request, pk):
+        app = Application.objects.select_related('job_offer', 'candidate').filter(
+            pk=pk, candidate__user_id=request.user.id,
+        ).first()
+        if not app:
+            return Response(
+                {'detail': 'Candidature introuvable.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        reason = (request.data.get('reason') or '').strip()
+        try:
+            withdraw_application(app, actor=request.user, reason=reason, request=request)
+        except InvalidStatusTransition:
+            return Response(
+                {'detail': 'Cette candidature ne peut plus être retirée (statut final atteint).'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        app.refresh_from_db()
+        return Response(
+            {
+                'message': 'Candidature retirée avec succès.',
+                'application_id': app.id,
+                'status': app.status,
+            }
+        )
 
 
 class ApplicationManualOverrideView(generics.GenericAPIView):
@@ -323,7 +396,11 @@ class ApplicationManualOverrideView(generics.GenericAPIView):
                 new_score = float(new_score)
             except (TypeError, ValueError):
                 return Response({'new_score': 'Doit être un nombre.'}, status=status.HTTP_400_BAD_REQUEST)
-        apply_manual_override(app, action, reason=reason, new_status=new_status, new_score=new_score)
+        apply_manual_override(
+            app, action,
+            reason=reason, new_status=new_status, new_score=new_score,
+            actor=request.user, request=request,
+        )
         app.refresh_from_db()
         return Response(ApplicationSerializer(app).data)
 
@@ -343,8 +420,31 @@ class ApplicationRunScreeningView(generics.GenericAPIView):
         app = self.get_queryset().filter(pk=pk).first()
         if not app:
             return Response({'detail': 'Candidature introuvable.'}, status=status.HTTP_404_NOT_FOUND)
+        before = {
+            'status': app.status,
+            'preselection_score': app.preselection_score,
+            'screening_score': app.screening_score,
+        }
         updated = run_auto_preselection(app)
         app.refresh_from_db()
+        try:
+            from .services import record_audit_log
+            from .models import ApplicationAuditLog
+            record_audit_log(
+                app,
+                ApplicationAuditLog.Action.RUN_SCREENING,
+                actor=request.user,
+                payload_before=before,
+                payload_after={
+                    'status': app.status,
+                    'preselection_score': app.preselection_score,
+                    'screening_score': app.screening_score,
+                    'preselected': bool(updated),
+                },
+                request=request,
+            )
+        except Exception:
+            logger.warning("audit log run_screening failed app=%s", app.pk, exc_info=True)
         return Response({
             'screening_score': app.screening_score,
             'status': app.status,
@@ -352,13 +452,85 @@ class ApplicationRunScreeningView(generics.GenericAPIView):
         })
 
 
+class ApplicationBulkStatusView(generics.GenericAPIView):
+    """
+    POST /applications/bulk-status/  (recruteur)
+    Met à jour le statut de plusieurs candidatures en une requête, via la
+    machine d'état (transitions interdites refusées individuellement).
+
+    Payload :
+        {
+            "application_ids": [1, 2, 3],
+            "status": "rejected",
+            "reason": "Non retenu après entretien"
+        }
+
+    Réponse :
+        {
+            "updated": [...ids],
+            "errors": [{"id": 2, "detail": "Transition interdite ..."}],
+        }
+    """
+    permission_classes = [IsTenantOrSuperAdmin]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'bulk_status'
+
+    def get_queryset(self):
+        qs = Application.objects.select_related('job_offer')
+        company_id = self.request.user.get_company_id()
+        if company_id is not None:
+            qs = qs.filter(job_offer__company_id=company_id)
+        return qs
+
+    def post(self, request):
+        ids = request.data.get('application_ids') or []
+        new_status = request.data.get('status')
+        reason = (request.data.get('reason') or '').strip()
+        if not isinstance(ids, list) or not ids:
+            return Response(
+                {'application_ids': 'Liste d\'IDs requise.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if new_status not in dict(Application.Status.choices):
+            return Response({'status': 'Statut invalide.'}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            ids = [int(x) for x in ids]
+        except (TypeError, ValueError):
+            return Response({'application_ids': 'IDs invalides.'}, status=status.HTTP_400_BAD_REQUEST)
+        # Limite de sécurité (anti-DoS)
+        if len(ids) > 500:
+            return Response(
+                {'application_ids': 'Maximum 500 candidatures par appel.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        force = bool(getattr(request.user, 'is_super_admin', False))
+        qs = self.get_queryset().filter(pk__in=ids)
+        updated, errors = [], []
+        for app in qs:
+            try:
+                transition_status(
+                    app, new_status, actor=request.user,
+                    reason=reason, request=request, force=force,
+                )
+                updated.append(app.pk)
+            except InvalidStatusTransition as e:
+                errors.append({'id': app.pk, 'detail': f'{e.from_status} → {e.to_status} interdit.'})
+            except Exception as exc:
+                logger.exception("bulk-status: failure for app_id=%s", app.pk)
+                errors.append({'id': app.pk, 'detail': str(exc)})
+        return Response({'updated': updated, 'errors': errors})
+
+
 class ApplicationPredictScoreView(generics.GenericAPIView):
     """
     POST /applications/{id}/predict-score/
     Extrait les features, applique le modèle ML, enregistre MLScore et retourne le score.
     Traçabilité : model_version, date de prédiction, logs et audit trail.
+    P10.8 — throttle 'predict_score' (120/heure par défaut).
     """
     permission_classes = [IsTenantOrSuperAdmin]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'predict_score'
 
     def get_queryset(self):
         qs = Application.objects.select_related('job_offer', 'candidate', 'job_offer__company')
@@ -393,6 +565,17 @@ class ApplicationPredictScoreView(generics.GenericAPIView):
                 features_json=features,
                 ml_explanation_json=ml_explanation_json,
             )
+            # P10.5 : cap à 20 prédictions par candidature pour éviter l'explosion
+            # de la table sur des appels en boucle.
+            try:
+                from django.conf import settings as _s
+                cap = int(getattr(_s, 'MLSCORE_MAX_PER_APPLICATION', 20))
+                older = MLScore.objects.filter(application_id=app.pk).order_by('-created_at')[cap:]
+                older_ids = [m.pk for m in older]
+                if older_ids:
+                    MLScore.objects.filter(pk__in=older_ids).delete()
+            except Exception:
+                logger.warning("MLScore cap cleanup failed app=%s", app.pk, exc_info=True)
             logger.info(
                 "predict-score: application_id=%s model_version=%s predicted_score=%.2f ml_score_id=%s user_id=%s (audit)",
                 app.id,
@@ -449,8 +632,10 @@ def _build_applications_xlsx(queryset):
 
 
 class ExportApplicationsExcelView(generics.GenericAPIView):
-    """Export Excel des candidatures (filtré par statut optionnel)."""
+    """Export Excel des candidatures (filtré par statut optionnel). Throttle 'export'."""
     permission_classes = [IsTenantOrSuperAdmin]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'export'
 
     def get_queryset(self):
         qs = Application.objects.select_related('job_offer', 'candidate', 'job_offer__company')
@@ -473,9 +658,83 @@ class ExportApplicationsExcelView(generics.GenericAPIView):
         return response
 
 
-class ExportShortlistedExcelView(generics.GenericAPIView):
-    """Export Excel des présélectionnés / shortlistés."""
+class ApplicationNoteListCreateView(generics.ListCreateAPIView):
+    """
+    Notes internes d'une candidature (recruteur uniquement).
+    GET/POST /applications/<application_id>/notes/
+    """
+    serializer_class = ApplicationNoteSerializer
     permission_classes = [IsTenantOrSuperAdmin]
+
+    def get_queryset(self):
+        application_id = self.kwargs['application_id']
+        qs = ApplicationNote.objects.select_related('author', 'application__job_offer').filter(
+            application_id=application_id,
+        )
+        company_id = self.request.user.get_company_id()
+        if company_id is not None:
+            qs = qs.filter(application__job_offer__company_id=company_id)
+        return qs
+
+    def _get_application(self):
+        qs = Application.objects.select_related('job_offer')
+        company_id = self.request.user.get_company_id()
+        if company_id is not None:
+            qs = qs.filter(job_offer__company_id=company_id)
+        return qs.filter(pk=self.kwargs['application_id']).first()
+
+    def perform_create(self, serializer):
+        app = self._get_application()
+        if not app:
+            raise generics.Http404
+        note = serializer.save(application=app, author=self.request.user)
+        try:
+            from .services import record_audit_log
+            record_audit_log(
+                app,
+                ApplicationAuditLog.Action.NOTE_UPDATED,
+                actor=self.request.user,
+                payload_after={'note_id': note.pk, 'is_pinned': note.is_pinned},
+                request=self.request,
+            )
+        except Exception:
+            logger.warning("audit log note_created failed app=%s", app.pk, exc_info=True)
+
+
+class ApplicationNoteDetailView(generics.RetrieveUpdateDestroyAPIView):
+    """Détail / modification / suppression d'une note interne (recruteur)."""
+    serializer_class = ApplicationNoteSerializer
+    permission_classes = [IsTenantOrSuperAdmin]
+
+    def get_queryset(self):
+        qs = ApplicationNote.objects.select_related('author', 'application__job_offer')
+        company_id = self.request.user.get_company_id()
+        if company_id is not None:
+            qs = qs.filter(application__job_offer__company_id=company_id)
+        return qs
+
+
+class ApplicationAuditLogListView(generics.ListAPIView):
+    """Lecture du journal d'audit d'une candidature (recruteur)."""
+    serializer_class = ApplicationAuditLogSerializer
+    permission_classes = [IsTenantOrSuperAdmin]
+
+    def get_queryset(self):
+        application_id = self.kwargs['application_id']
+        qs = ApplicationAuditLog.objects.select_related('actor', 'application__job_offer').filter(
+            application_id=application_id,
+        )
+        company_id = self.request.user.get_company_id()
+        if company_id is not None:
+            qs = qs.filter(application__job_offer__company_id=company_id)
+        return qs
+
+
+class ExportShortlistedExcelView(generics.GenericAPIView):
+    """Export Excel des présélectionnés / shortlistés. Throttle 'export'."""
+    permission_classes = [IsTenantOrSuperAdmin]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'export'
 
     def get_queryset(self):
         qs = Application.objects.filter(

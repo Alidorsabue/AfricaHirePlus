@@ -7,13 +7,16 @@ import { candidatesApi } from '../api/candidates'
 import { applicationsApi } from '../api/applications'
 import { unwrapList } from '../api/utils'
 import type { Candidate, CandidateProfile, Application } from '../types'
+import { useToast } from '../contexts/ToastContext'
 
 export default function CandidateProfile() {
   const { t } = useTranslation()
   const { id } = useParams<{ id: string }>()
   const queryClient = useQueryClient()
+  const { toast } = useToast()
   const candidateId = Number(id)
   const [editing, setEditing] = useState(false)
+  const [tagsInput, setTagsInput] = useState('')
   const [form, setForm] = useState({
     first_name: '',
     last_name: '',
@@ -47,6 +50,7 @@ export default function CandidateProfile() {
   useEffect(() => {
     if (candidate?.data) {
       const c = candidate.data as Candidate
+      setTagsInput(Array.isArray(c.tags) ? c.tags.join(', ') : '')
       setForm({
         first_name: c.first_name ?? '',
         last_name: c.last_name ?? '',
@@ -84,7 +88,37 @@ export default function CandidateProfile() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['applications'] })
       queryClient.invalidateQueries({ queryKey: ['candidate', candidateId] })
+      toast.success(t('common.saved') || 'Enregistré.')
     },
+    onError: (err: unknown) => {
+      const msg = (err as { response?: { data?: { error?: { message?: string } } } })?.response?.data?.error?.message
+      toast.error(msg || t('common.error') || 'Erreur')
+    },
+  })
+
+  const tagsMutation = useMutation({
+    mutationFn: async () => {
+      const tags = tagsInput
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean)
+      return (await candidatesApi.updateTags(candidateId, tags)).data
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['candidate', candidateId] })
+      toast.success(t('common.saved') || 'Enregistré.')
+    },
+    onError: () => toast.error(t('common.error') || 'Erreur'),
+  })
+
+  const anonymizeMutation = useMutation({
+    mutationFn: () => candidatesApi.anonymize(candidateId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['candidate', candidateId] })
+      queryClient.invalidateQueries({ queryKey: ['candidates'] })
+      toast.success(t('candidate.anonymized') || 'Candidat anonymisé.')
+    },
+    onError: () => toast.error(t('common.error') || 'Erreur'),
   })
 
   if (isLoading || !candidate?.data) {
@@ -117,6 +151,22 @@ export default function CandidateProfile() {
         <Link to="/candidates" className="text-sm font-medium text-teal-600 hover:underline">
           ← {t('common.back')}
         </Link>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              const ok = window.confirm(
+                t('candidate.anonymizeConfirm') ||
+                  'Anonymiser ce candidat (RGPD) ? Cette action est irréversible.'
+              )
+              if (!ok) return
+              anonymizeMutation.mutate()
+            }}
+            disabled={anonymizeMutation.isPending}
+            className="rounded-lg border border-red-200 bg-white px-3 py-1.5 text-sm font-medium text-red-700 hover:bg-red-50 disabled:opacity-50 dark:border-red-900/50 dark:bg-slate-800 dark:text-red-300 dark:hover:bg-red-900/20"
+          >
+            {anonymizeMutation.isPending ? (t('common.loading') || '...') : (t('candidate.anonymize') || 'Anonymiser')}
+          </button>
         {!editing ? (
           <button
             type="button"
@@ -137,6 +187,36 @@ export default function CandidateProfile() {
             </button>
           </div>
         )}
+        </div>
+      </div>
+
+      {c.is_anonymized && (
+        <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-900/20 dark:text-amber-200">
+          {t('candidate.anonymizedHint') || 'Ce candidat est anonymisé (RGPD).'}
+        </div>
+      )}
+
+      <div className="mt-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800/50">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div className="font-semibold text-slate-800 dark:text-slate-100">{t('candidate.tags') || 'Tags'}</div>
+          <button
+            type="button"
+            onClick={() => tagsMutation.mutate()}
+            disabled={tagsMutation.isPending}
+            className="self-start rounded-lg bg-teal-600 px-4 py-2 text-sm font-medium text-white hover:bg-teal-700 disabled:opacity-50 sm:self-auto"
+          >
+            {tagsMutation.isPending ? (t('common.loading') || '...') : (t('common.save') || 'Enregistrer')}
+          </button>
+        </div>
+        <input
+          value={tagsInput}
+          onChange={(e) => setTagsInput(e.target.value)}
+          placeholder={t('candidate.tagsPlaceholder') || 'ex: top-talent, remote-ok'}
+          className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-100"
+        />
+        <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+          {t('candidate.tagsHint') || 'Séparez les tags par des virgules.'}
+        </p>
       </div>
 
       {editing ? (

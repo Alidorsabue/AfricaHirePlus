@@ -66,3 +66,45 @@ Si l’offre n’a **aucune** règle de screening et **aucun** critère de prés
 
 - **Problème** : le score AfricaHire+ dépend des **règles/critères configurés** ; peu ou pas de règles ⇒ score bas ou absent, alors que ChatGPT analyse tout le JD.
 - **Solution** : extraction automatique des mots-clés depuis toute l’offre, matching enrichi CV vs JD, et utilisation d’un **score ATS (JD vs CV)** lorsque les règles de présélection sont absentes, pour obtenir un résultat proche de 70–80 % quand le CV correspond bien à l’offre.
+
+## Moteur de scoring v2 (mai 2026)
+
+Le moteur `apps/jobs/scoring_engine.py` a été enrichi pour rapprocher encore le scoring d'un comportement type ATS expert :
+
+### Nouveautés
+- **Scoring graduel (`partial credit`)** : un candidat à 3 ans d'expérience pour un poste qui en demande 5 obtient désormais 60 % du poids du critère au lieu de 0 % (activé par défaut, désactivable via `partial: false` par critère).
+- **Nouveaux opérateurs** :
+  - `range` — fenêtre `[min, max]` avec scoring graduel hors fenêtre selon la distance.
+  - `similar_to` — similarité textuelle fuzzy (SequenceMatcher), seuil configurable via `threshold` (défaut 0.75).
+  - `skills_match` — matching d'une liste de compétences requises avec tolérance orthographique (similarité ≥ 0.80), ratio passable via `min_match` (défaut 0.5).
+- **Catégories** : chaque critère peut porter une `category` ; le résultat agrège un score normalisé par catégorie (utile pour les radars d'évaluation RH).
+- **Indice de confiance** : ratio critères évalués / critères attendus, retourné dans `confidence` (0–1).
+
+### Schéma de sortie `compute_weighted_score`
+```json
+{
+  "total_score": 78.0,
+  "confidence": 1.0,
+  "categories": {
+    "experience": {"earned": 24.0, "possible": 30.0, "score": 80.0},
+    "education": {"earned": 40.0, "possible": 40.0, "score": 100.0}
+  },
+  "details": [
+    {
+      "criterion": "experience_years",
+      "category": "experience",
+      "passed": false,
+      "ratio": 0.8,
+      "weight_awarded": 24.0,
+      "weight_max": 30,
+      "mandatory": false
+    }
+  ],
+  "mandatory_failed": false
+}
+```
+
+### Compatibilité
+- `validate_criteria_json` (importé par `apps/jobs/serializers.py`) reste exporté et accepte les nouveaux opérateurs.
+- Les clés v1 (`total_score`, `details[*].criterion/passed/weight_awarded`, `mandatory_failed`) sont préservées : aucune migration nécessaire côté frontend ou base.
+- Les enrichissements v2 (`ratio`, `category`, `weight_max`, `mandatory`, `confidence`, `categories`) sont additifs.

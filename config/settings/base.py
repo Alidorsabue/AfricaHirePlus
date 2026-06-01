@@ -116,24 +116,60 @@ FILE_UPLOAD_MAX_MEMORY_SIZE = 20 * 1024 * 1024  # 20 Mo
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # ---------------------------------------------------------------------------
-# Email (envoi automatique : candidature reçue, shortlist, refus)
+# Email — Configuration multi-provider
+# ---------------------------------------------------------------------------
+# Trois modes (sélection automatique selon les variables d'env) :
+#   1. BREVO_API_KEY défini  → backend HTTP API Brevo (recommandé : tracking,
+#      message-id, statistiques, webhooks possibles).
+#   2. EMAIL_HOST défini     → backend SMTP classique (Brevo SMTP, Mailgun,
+#      SES, etc.). Pour Brevo SMTP :
+#          EMAIL_HOST=smtp-relay.brevo.com
+#          EMAIL_PORT=587
+#          EMAIL_USE_TLS=true
+#          EMAIL_HOST_USER=<login Brevo (votre email)>
+#          EMAIL_HOST_PASSWORD=<SMTP key Brevo>
+#   3. Sinon                  → backend `console` (les emails s'affichent dans
+#      les logs Django). Pratique en dev.
+#
+# La variable EMAIL_BACKEND peut TOUJOURS être forcée manuellement (overrides
+# l'auto-détection).
 # ---------------------------------------------------------------------------
 DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', 'noreply@africahireplus.com')
 SERVER_EMAIL = os.environ.get('SERVER_EMAIL', DEFAULT_FROM_EMAIL)  # Erreurs 500 / admins
 
-# Backend : console en dev (sortie terminal), SMTP quand EMAIL_HOST est défini
-EMAIL_BACKEND = os.environ.get(
-    'EMAIL_BACKEND',
-    'django.core.mail.backends.console.EmailBackend',
-)
+BREVO_API_KEY = os.environ.get('BREVO_API_KEY', '').strip()
+BREVO_API_URL = os.environ.get('BREVO_API_URL', 'https://api.brevo.com/v3/smtp/email').strip()
+BREVO_API_TIMEOUT = int(os.environ.get('BREVO_API_TIMEOUT', '15'))
+
 EMAIL_HOST = os.environ.get('EMAIL_HOST', '')
 EMAIL_PORT = int(os.environ.get('EMAIL_PORT', '587'))
 EMAIL_USE_TLS = os.environ.get('EMAIL_USE_TLS', 'true').lower() == 'true'
 EMAIL_USE_SSL = os.environ.get('EMAIL_USE_SSL', 'false').lower() == 'true'
 EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER', '')
 EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', '')
-# Nom optionnel affiché comme expéditeur (ex: "AfricaHirePlus <noreply@...>")
 EMAIL_FROM_DISPLAY_NAME = os.environ.get('EMAIL_FROM_DISPLAY_NAME', '')
+EMAIL_TIMEOUT = int(os.environ.get('EMAIL_TIMEOUT', '30'))
+
+# Auto-détection du backend si EMAIL_BACKEND n'est pas explicitement défini.
+_explicit_backend = os.environ.get('EMAIL_BACKEND', '').strip()
+if _explicit_backend:
+    EMAIL_BACKEND = _explicit_backend
+elif BREVO_API_KEY:
+    EMAIL_BACKEND = 'apps.emails.backends.BrevoApiBackend'
+elif EMAIL_HOST:
+    EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+else:
+    EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+
+# ---------------------------------------------------------------------------
+# Configuration audit log emails (P9)
+# ---------------------------------------------------------------------------
+# Conservation des logs (jours) ; mettre 0 pour conserver sans limite. Une
+# commande `python manage.py purge_old_email_logs` supprime les vieux logs.
+EMAIL_LOG_RETENTION_DAYS = int(os.environ.get('EMAIL_LOG_RETENTION_DAYS', '90'))
+# Activer le log d'audit (mettre à 'false' désactive complètement la création
+# d'EmailLog — utile pour des envois massifs où la perf prime).
+EMAIL_AUDIT_LOG_ENABLED = os.environ.get('EMAIL_AUDIT_LOG_ENABLED', 'true').lower() == 'true'
 
 # Custom user model
 AUTH_USER_MODEL = 'users.User'
@@ -159,7 +195,26 @@ REST_FRAMEWORK = {
         'rest_framework.renderers.JSONRenderer',
     ],
     'EXCEPTION_HANDLER': 'config.exceptions.custom_exception_handler',
+    # P10.8 — Rate limiting (anti-spam, anti-DoS)
+    'DEFAULT_THROTTLE_CLASSES': [
+        'rest_framework.throttling.AnonRateThrottle',
+        'rest_framework.throttling.UserRateThrottle',
+    ],
+    'DEFAULT_THROTTLE_RATES': {
+        'anon': os.environ.get('THROTTLE_ANON', '60/min'),
+        'user': os.environ.get('THROTTLE_USER', '300/min'),
+        # Scopes spécifiques (utilisés par ScopedRateThrottle dans certaines vues)
+        'public_apply': os.environ.get('THROTTLE_PUBLIC_APPLY', '10/hour'),
+        'export': os.environ.get('THROTTLE_EXPORT', '20/hour'),
+        'bulk_status': os.environ.get('THROTTLE_BULK_STATUS', '60/hour'),
+        'predict_score': os.environ.get('THROTTLE_PREDICT_SCORE', '120/hour'),
+    },
 }
+
+# P10 — Tailles maximales des fichiers (Mo) — surchargeables par env
+CV_MAX_SIZE_MB = int(os.environ.get('CV_MAX_SIZE_MB', 10))
+COVER_LETTER_MAX_SIZE_MB = int(os.environ.get('COVER_LETTER_MAX_SIZE_MB', 5))
+MLSCORE_MAX_PER_APPLICATION = int(os.environ.get('MLSCORE_MAX_PER_APPLICATION', 20))
 
 # ---------------------------------------------------------------------------
 # JWT (Simple JWT)
@@ -180,6 +235,13 @@ SIMPLE_JWT = {
 # ---------------------------------------------------------------------------
 CORS_ALLOW_ALL_ORIGINS = False
 CORS_ALLOWED_ORIGINS = []
+
+# ---------------------------------------------------------------------------
+# Frontend (utilisé pour générer les liens magiques : correcteur, etc.)
+# ---------------------------------------------------------------------------
+FRONTEND_BASE_URL = os.environ.get('FRONTEND_BASE_URL', '').rstrip('/')
+# Chemin React-side de la page correcteur (token magique en query string).
+CORRECTOR_LINK_PATH = os.environ.get('CORRECTOR_LINK_PATH', '/correct')
 
 # ---------------------------------------------------------------------------
 # AWS S3 (compatible MinIO, etc.) - config de base

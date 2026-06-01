@@ -2,6 +2,7 @@
 Candidatures : lien Candidate <-> JobOffer (multi-tenant via job_offer.company).
 Une candidature = un candidat postule à une offre ; statut et score de screening.
 """
+from django.conf import settings
 from django.db import models
 
 from apps.core.models import SoftDeleteMixin, TimeStampedMixin
@@ -151,3 +152,110 @@ class MLScore(TimeStampedMixin, models.Model):
 
     def __str__(self):
         return f'MLScore {self.predicted_score:.1f} (v{self.model_version}) — App #{self.application_id}'
+
+
+class ApplicationAuditLog(models.Model):
+    """
+    Journal d'audit des candidatures : trace TOUTES les modifications de statut /
+    score / override manuel pour conformité et investigations RH.
+
+    Toutes les modifications sensibles passent par ce log (P10.3) :
+    - changement de statut (recruteur + workflow auto)
+    - manual override (score, shortlist)
+    - retrait par le candidat
+    - relance de screening
+    """
+
+    class Action(models.TextChoices):
+        STATUS_CHANGE = 'status_change', 'Changement de statut'
+        SCORE_OVERRIDE = 'score_override', 'Override score'
+        MANUAL_OVERRIDE = 'manual_override', 'Override manuel'
+        WITHDRAWN = 'withdrawn', 'Retrait candidat'
+        RUN_SCREENING = 'run_screening', 'Relance screening'
+        NOTE_UPDATED = 'note_updated', 'Note interne modifiée'
+
+    application = models.ForeignKey(
+        Application,
+        on_delete=models.CASCADE,
+        related_name='audit_logs',
+        db_index=True,
+    )
+    actor = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='application_audit_logs',
+        help_text='User à l\'origine de l\'action (null si système / signal).',
+    )
+    action = models.CharField(
+        max_length=32,
+        choices=Action.choices,
+        db_index=True,
+    )
+    payload_before = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text='Snapshot des champs concernés avant modification.',
+    )
+    payload_after = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text='Snapshot des champs concernés après modification.',
+    )
+    reason = models.TextField(blank=True)
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    user_agent = models.CharField(max_length=255, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        db_table = 'applications_audit_log'
+        verbose_name = 'Journal candidature'
+        verbose_name_plural = 'Journaux candidatures'
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['application', 'created_at']),
+            models.Index(fields=['action', 'created_at']),
+            models.Index(fields=['actor', 'created_at']),
+        ]
+
+    def __str__(self):
+        return f'{self.get_action_display()} — App #{self.application_id} ({self.created_at:%Y-%m-%d %H:%M})'
+
+
+class ApplicationNote(models.Model):
+    """
+    Note interne sur une candidature (P10.9) — visible UNIQUEMENT par les recruteurs.
+    Différent de `Application.notes` (champ texte unique) : permet plusieurs notes
+    horodatées par plusieurs recruteurs.
+    """
+
+    application = models.ForeignKey(
+        Application,
+        on_delete=models.CASCADE,
+        related_name='internal_notes',
+        db_index=True,
+    )
+    author = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='application_notes',
+    )
+    body = models.TextField()
+    is_pinned = models.BooleanField(default=False, db_index=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'applications_note'
+        verbose_name = 'Note candidature'
+        verbose_name_plural = 'Notes candidatures'
+        ordering = ['-is_pinned', '-created_at']
+        indexes = [
+            models.Index(fields=['application', 'created_at']),
+        ]
+
+    def __str__(self):
+        return f'Note #{self.pk} — App #{self.application_id}'
