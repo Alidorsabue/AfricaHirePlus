@@ -601,7 +601,8 @@ export default function PublicJobApply() {
 
   const detectCvConflicts = (data: CvParsedFormData): string[] => {
     const conflicts: string[] = []
-    const scalarChecks: Array<{ key: keyof typeof form; labelKey: string }> = [
+    type CvScalarKey = 'email' | 'phone' | 'cell_number' | 'first_name' | 'last_name' | 'summary' | 'education_level' | 'current_position'
+    const scalarChecks: Array<{ key: CvScalarKey; labelKey: string }> = [
       { key: 'email', labelKey: 'emailAddress' },
       { key: 'phone', labelKey: 'phoneNumber' },
       { key: 'cell_number', labelKey: 'cellNumber' },
