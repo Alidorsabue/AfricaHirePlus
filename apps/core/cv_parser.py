@@ -141,15 +141,22 @@ def _find_section(text: str, section_name: str) -> str | None:
         all_section_patterns.extend(pats)
     section_re = "|".join(all_section_patterns)
 
+    _section_flags = re.IGNORECASE | re.MULTILINE
     for p in patterns:
         # Cherche l'en-tête (sur une ligne propre ou avec ponctuation)
-        regex = re.compile(rf"(?im)^\s*(?:[•\-*]+\s*)?({p})\s*[:\-]?\s*$|(?im)({p})\s*[:\-]")
+        regex = re.compile(
+            rf"^\s*(?:[•\-*]+\s*)?({p})\s*[:\-]?\s*$|({p})\s*[:\-]",
+            _section_flags,
+        )
         m = regex.search(text)
         if not m:
             continue
         start = m.end()
         # Cherche le prochain en-tête de section pour borner
-        next_section = re.compile(rf"(?im)^\s*(?:[•\-*]+\s*)?({section_re})\s*[:\-]?\s*$|(?im)({section_re})\s*[:\-]")
+        next_section = re.compile(
+            rf"^\s*(?:[•\-*]+\s*)?({section_re})\s*[:\-]?\s*$|({section_re})\s*[:\-]",
+            _section_flags,
+        )
         next_m = next_section.search(text, start)
         end = next_m.start() if next_m else min(start + 4000, len(text))
         snippet = text[start:end].strip()

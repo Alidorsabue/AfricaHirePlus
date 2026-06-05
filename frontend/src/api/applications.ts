@@ -8,6 +8,62 @@ import type {
   ApplicationAuditLog,
 } from '../types'
 
+/** Données structurées retournées par l'analyse CV pour le formulaire. */
+export interface CvParsedFormData {
+  title?: string
+  first_name?: string
+  last_name?: string
+  preferred_name?: string
+  date_of_birth?: string | null
+  gender?: string
+  email?: string
+  phone?: string
+  cell_number?: string
+  address?: string
+  address_line2?: string
+  city?: string
+  country?: string
+  postcode?: string
+  nationality?: string
+  second_nationality?: string
+  linkedin_url?: string
+  portfolio_url?: string
+  summary?: string
+  skills?: string[] | string
+  experience_years?: number | null
+  education_level?: string
+  current_position?: string
+  location?: string
+  education?: Array<Record<string, string>>
+  experience?: Array<Record<string, string>>
+  languages?: Array<Record<string, string>>
+  references?: Array<Record<string, string>>
+}
+
+/** Score de confiance 0–1 par rubrique du formulaire (clé = FORM_SECTIONS). */
+export type CvSectionConfidence = Partial<Record<
+  'personalDetails' | 'education' | 'experience' | 'skills' | 'languages' | 'references' | 'documents',
+  number
+>>
+
+export interface ParseCvResponse {
+  source: 'upload' | 'last_application'
+  form_data: CvParsedFormData
+  section_confidence?: CvSectionConfidence
+  resume_url?: string | null
+  resume_filename?: string | null
+  warnings?: string[]
+}
+
+export interface LastCvInfoResponse {
+  available: boolean
+  resume_url?: string | null
+  resume_filename?: string | null
+  applied_at?: string
+  job_title?: string | null
+  application_id?: number
+}
+
 /** Réponse GET ma candidature pour une offre (pré-remplir formulaire). */
 export interface MyApplicationByJobResponse {
   application: {
@@ -109,4 +165,23 @@ export const applicationsApi = {
       data,
       { timeout: 90_000 }
     ),
+  /** Infos sur le dernier CV déposé (candidature précédente). */
+  getLastCvInfo: (params?: { exclude_job_slug?: string }) =>
+    api.get<LastCvInfoResponse>('/applications/last-cv-info/', { params }),
+  /** Analyse un CV uploadé et retourne les champs pour pré-remplir le formulaire. */
+  parseCv: (file: File) => {
+    const fd = new FormData()
+    fd.append('resume', file)
+    return api.post<ParseCvResponse>('/applications/parse-cv/', fd, {
+      timeout: 90_000,
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+  },
+  /** Réutilise le CV de la dernière candidature pour pré-remplir le formulaire. */
+  parseLastCv: (params?: { exclude_job_slug?: string }) => {
+    const fd = new FormData()
+    fd.append('use_last_cv', 'true')
+    if (params?.exclude_job_slug) fd.append('exclude_job_slug', params.exclude_job_slug)
+    return api.post<ParseCvResponse>('/applications/parse-cv/', fd, { timeout: 60_000 })
+  },
 }

@@ -5,7 +5,7 @@ import logging
 from io import BytesIO
 from django.http import HttpResponse
 from openpyxl import Workbook
-from rest_framework import generics, status
+from rest_framework import generics, status, serializers as drf_serializers
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
@@ -21,6 +21,18 @@ from .serializers import (
     ApplicationNoteSerializer,
     ApplicationAuditLogSerializer,
     PublicApplySerializer,
+    _validate_uploaded_file,
+    CV_ALLOWED_EXTENSIONS,
+    CV_ALLOWED_MIME,
+    DEFAULT_CV_MAX_SIZE_MB,
+    _resolve_max_size,
+)
+from apps.core.cv_extraction import extract_cv
+from apps.core.cv_form_mapper import (
+    build_form_data_from_cv_text,
+    candidate_to_form_data,
+    compute_section_confidence,
+    merge_form_data,
 )
 from .services import (
     submit_application,
@@ -146,6 +158,157 @@ class MyApplicationByJobView(generics.GenericAPIView):
             },
             'candidate': candidate_data,
             'job_still_open': job_accepts_applications(job),
+        })
+
+
+def _get_last_application_with_cv(user, exclude_job_slug: str | None = None):
+    """Dernière candidature du candidat disposant d'un CV (fichier ou texte extrait)."""
+    qs = Application.objects.filter(
+        candidate__user_id=user.id,
+    ).select_related('job_offer', 'candidate').order_by('-applied_at')
+    if exclude_job_slug:
+        qs = qs.exclude(job_offer__slug=exclude_job_slug)
+    for app in qs[:20]:
+        cand = app.candidate
+        if cand and (cand.resume or (cand.raw_cv_text and len(cand.raw_cv_text) >= 50)):
+            return app
+    return None
+
+
+class LastCvInfoView(generics.GenericAPIView):
+    """
+    GET : indique si le candidat peut réutiliser le CV d'une candidature précédente.
+    Query optionnel : exclude_job_slug (offre en cours de candidature).
+    """
+    permission_classes = [IsAuthenticated, IsCandidate]
+
+    def get(self, request):
+        exclude_slug = request.query_params.get('exclude_job_slug') or None
+        app = _get_last_application_with_cv(request.user, exclude_job_slug=exclude_slug)
+        if not app:
+            return Response({'available': False})
+        cand = app.candidate
+        resume_url = None
+        if cand.resume:
+            resume_url = request.build_absolute_uri(cand.resume.url)
+        return Response({
+            'available': True,
+            'resume_url': resume_url,
+            'resume_filename': cand.resume.name.split('/')[-1] if cand.resume else None,
+            'applied_at': app.applied_at,
+            'job_title': app.job_offer.title if app.job_offer_id else None,
+            'application_id': app.id,
+        })
+
+
+class ParseCvForApplicationView(generics.GenericAPIView):
+    """
+    POST : analyse un CV (upload ou dernière candidature) et retourne les champs
+    structurés pour pré-remplir le formulaire de candidature.
+
+    - multipart avec champ `resume` : fichier CV à analyser
+    - ou JSON/form `use_last_cv=true` (+ optionnel `exclude_job_slug`)
+    """
+    permission_classes = [IsAuthenticated, IsCandidate]
+
+    def post(self, request):
+        use_last = str(request.data.get('use_last_cv', '')).lower() in ('1', 'true', 'yes')
+        exclude_slug = request.data.get('exclude_job_slug') or None
+        resume_file = request.FILES.get('resume')
+        warnings: list[str] = []
+        resume_url = None
+        resume_filename = None
+        source = 'upload'
+        parsed_confidence: dict[str, float] = {}
+
+        if use_last:
+            source = 'last_application'
+            app = _get_last_application_with_cv(request.user, exclude_job_slug=exclude_slug)
+            if not app:
+                return Response(
+                    {'detail': 'Aucun CV de candidature précédente trouvé.'},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+            cand = app.candidate
+            profile_data = candidate_to_form_data(cand)
+            raw_text = (cand.raw_cv_text or '').strip()
+            if not raw_text and cand.resume:
+                name = cand.resume.name or ''
+                try:
+                    with cand.resume.open('rb') as f:
+                        extraction = extract_cv(f, filename=name, content_type='')
+                    raw_text = extraction.text or ''
+                    warnings.extend(extraction.warnings or [])
+                except Exception as e:
+                    logger.warning("ParseCvForApplicationView: lecture CV stocké échouée: %s", e)
+                    warnings.append(f"Impossible de relire le fichier CV : {e}")
+            if raw_text and len(raw_text) >= 50:
+                parsed_form = build_form_data_from_cv_text(raw_text)
+                form_data = merge_form_data(profile_data, parsed_form)
+                meta = form_data.pop('parsed_meta', {})
+                parsed_confidence = meta.get('confidence') or {}
+                warnings.extend(meta.get('warnings') or [])
+            else:
+                form_data = profile_data
+                form_data.pop('parsed_meta', None)
+                if not cand.resume:
+                    warnings.append("Texte CV indisponible — données du profil uniquement.")
+            if cand.resume:
+                resume_url = request.build_absolute_uri(cand.resume.url)
+                resume_filename = cand.resume.name.split('/')[-1]
+        elif resume_file:
+            try:
+                _validate_uploaded_file(
+                    resume_file,
+                    field_label='CV',
+                    max_bytes=_resolve_max_size('CV_MAX_SIZE_MB', DEFAULT_CV_MAX_SIZE_MB),
+                    allowed_extensions=CV_ALLOWED_EXTENSIONS,
+                    allowed_mime=CV_ALLOWED_MIME,
+                )
+            except drf_serializers.ValidationError as e:
+                return Response({'detail': e.detail}, status=status.HTTP_400_BAD_REQUEST)
+
+            name = getattr(resume_file, 'name', '') or ''
+            ct = getattr(resume_file, 'content_type', '') or ''
+            extraction = extract_cv(resume_file, filename=name, content_type=ct)
+            if hasattr(resume_file, 'seek'):
+                try:
+                    resume_file.seek(0)
+                except Exception:
+                    pass
+            warnings.extend(extraction.warnings or [])
+            raw_text = extraction.text or ''
+            if len(raw_text) < 50:
+                return Response(
+                    {
+                        'detail': (
+                            'Impossible d\'extraire suffisamment de texte du CV. '
+                            'Essayez un PDF texte ou un document Word.'
+                        ),
+                        'warnings': warnings,
+                    },
+                    status=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                )
+            form_data = build_form_data_from_cv_text(raw_text)
+            meta = form_data.pop('parsed_meta', {})
+            parsed_confidence = meta.get('confidence') or {}
+            warnings.extend(meta.get('warnings') or [])
+            resume_filename = name
+        else:
+            return Response(
+                {'detail': 'Envoyez un fichier CV (resume) ou use_last_cv=true.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        section_confidence = compute_section_confidence(form_data, parsed_confidence, source)
+
+        return Response({
+            'source': source,
+            'form_data': form_data,
+            'section_confidence': section_confidence,
+            'resume_url': resume_url,
+            'resume_filename': resume_filename,
+            'warnings': warnings,
         })
 
 

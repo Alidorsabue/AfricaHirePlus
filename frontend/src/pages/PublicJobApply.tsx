@@ -8,10 +8,15 @@ import { useParams, Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { isAxiosError } from 'axios'
-import { ArrowLeft, Send } from 'lucide-react'
+import { ArrowLeft, FileUp, Send, Sparkles } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { jobsApi } from '../api/jobs'
-import { applicationsApi } from '../api/applications'
+import {
+  applicationsApi,
+  type CvParsedFormData,
+  type CvSectionConfidence,
+  type ParseCvResponse,
+} from '../api/applications'
 import { candidatesApi } from '../api/candidates'
 import type { CandidateProfile } from '../types'
 
@@ -153,6 +158,38 @@ const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 
 const DAYS = Array.from({ length: 31 }, (_, i) => String(i + 1))
 const YEARS = Array.from({ length: 80 }, (_, i) => String(new Date().getFullYear() - 18 - i))
 
+type CvAutofillSectionKey =
+  | 'personalDetails'
+  | 'education'
+  | 'experience'
+  | 'skills'
+  | 'languages'
+  | 'references'
+  | 'documents'
+
+function confidenceBadge(
+  score: number | undefined,
+  t: (key: string) => string
+): { label: string; cls: string } | null {
+  if (score == null || score <= 0) return null
+  if (score >= 0.75) {
+    return {
+      label: t('publicJob.cvConfidenceHigh'),
+      cls: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200',
+    }
+  }
+  if (score >= 0.45) {
+    return {
+      label: t('publicJob.cvConfidenceMedium'),
+      cls: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200',
+    }
+  }
+  return {
+    label: t('publicJob.cvConfidenceLow'),
+    cls: 'bg-slate-200 text-slate-600 dark:bg-slate-600 dark:text-slate-300',
+  }
+}
+
 export default function PublicJobApply() {
   const { slug } = useParams<{ slug: string }>()
   const { t } = useTranslation()
@@ -200,7 +237,21 @@ export default function PublicJobApply() {
   const [currentStep, setCurrentStep] = useState(0)
   const [showDraftSaved, setShowDraftSaved] = useState(false)
   const [signatureError, setSignatureError] = useState<string | null>(null)
+  const [cvParsing, setCvParsing] = useState(false)
+  const [cvAutofillMessage, setCvAutofillMessage] = useState<string | null>(null)
+  const [cvAutofillWarnings, setCvAutofillWarnings] = useState<string[]>([])
+  const [cvAutofillError, setCvAutofillError] = useState<string | null>(null)
+  const [cvSectionConfidence, setCvSectionConfidence] = useState<CvSectionConfidence>({})
+  const [pendingCvAutofill, setPendingCvAutofill] = useState<{
+    formData: CvParsedFormData
+    sectionConfidence: CvSectionConfidence
+    warnings: string[]
+    resumeFile: File | null
+    conflicts: string[]
+    successMessage: string
+  } | null>(null)
   const lastPreFillSourceRef = useRef<'application' | 'profile' | null>(null)
+  const cvAutofillInputRef = useRef<HTMLInputElement>(null)
 
   const FORM_SECTIONS = [
     'personalDetails',
@@ -248,6 +299,13 @@ export default function PublicJobApply() {
     retry: false,
   })
   const myApplicationData = myApplicationRes
+  const { data: lastCvInfo } = useQuery({
+    queryKey: ['lastCvInfo', slug],
+    queryFn: () => applicationsApi.getLastCvInfo(slug ? { exclude_job_slug: slug } : undefined).then((r) => r.data),
+    enabled: !!user && !!job,
+    retry: false,
+  })
+
   const { data: profileData, isLoading: profileLoading } = useQuery({
     queryKey: ['candidateProfile', 'apply', companyId ?? 'any'],
     queryFn: async ({ queryKey }) => {
@@ -534,6 +592,328 @@ export default function PublicJobApply() {
     )
   }
 
+  const isListEmpty = <T extends Record<string, string>>(
+    list: T[],
+    keys: (keyof T)[]
+  ): boolean =>
+    list.length === 0 ||
+    list.every((item) => keys.every((k) => !(item[k] ?? '').toString().trim()))
+
+  const detectCvConflicts = (data: CvParsedFormData): string[] => {
+    const conflicts: string[] = []
+    const scalarChecks: Array<{ key: keyof typeof form; labelKey: string }> = [
+      { key: 'email', labelKey: 'emailAddress' },
+      { key: 'phone', labelKey: 'phoneNumber' },
+      { key: 'cell_number', labelKey: 'cellNumber' },
+      { key: 'first_name', labelKey: 'firstNameAsPassport' },
+      { key: 'last_name', labelKey: 'lastNameAsPassport' },
+      { key: 'summary', labelKey: 'coverLetter' },
+      { key: 'education_level', labelKey: 'degree' },
+      { key: 'current_position', labelKey: 'experience' },
+    ]
+    for (const { key, labelKey } of scalarChecks) {
+      const cur = String(form[key] ?? '').trim()
+      const incoming = String(data[key] ?? '').trim()
+      if (cur && incoming && cur.toLowerCase() !== incoming.toLowerCase()) {
+        const label = t(`publicJob.${labelKey}`)
+        if (!conflicts.includes(label)) conflicts.push(label)
+      }
+    }
+    const curLinkedin = (form.linkedin_url ?? '').trim()
+    const incomingLinkedin = (data.linkedin_url ?? '').trim()
+    if (curLinkedin && incomingLinkedin && curLinkedin.toLowerCase() !== incomingLinkedin.toLowerCase()) {
+      conflicts.push('LinkedIn')
+    }
+    if (
+      form.experience_years !== '' &&
+      data.experience_years != null &&
+      Number(form.experience_years) !== Number(data.experience_years)
+    ) {
+      conflicts.push(t('publicJob.experience'))
+    }
+    if (
+      !isListEmpty(education, ['institution', 'degree_type', 'discipline', 'start_year']) &&
+      (data.education?.length ?? 0) > 0
+    ) {
+      conflicts.push(t('publicJob.education'))
+    }
+    if (
+      !isListEmpty(experience, ['job_title', 'company_name', 'responsibilities']) &&
+      (data.experience?.length ?? 0) > 0
+    ) {
+      conflicts.push(t('publicJob.experience'))
+    }
+    if (
+      !isListEmpty(languages, ['language', 'speaking_proficiency']) &&
+      (data.languages?.length ?? 0) > 0
+    ) {
+      conflicts.push(t('publicJob.languages'))
+    }
+    if (
+      !isListEmpty(references, ['first_name', 'last_name', 'email']) &&
+      (data.references?.length ?? 0) > 0
+    ) {
+      conflicts.push(t('publicJob.references'))
+    }
+    const currentSkills = (form.skills ?? '').split(/[,;\n]/).map((s) => s.trim()).filter(Boolean)
+    const incomingSkills = Array.isArray(data.skills)
+      ? data.skills
+      : typeof data.skills === 'string'
+        ? data.skills.split(/[,;\n]/).map((s) => s.trim()).filter(Boolean)
+        : []
+    if (
+      currentSkills.length > 0 &&
+      incomingSkills.length > 0 &&
+      incomingSkills.some((s) => !currentSkills.some((c) => c.toLowerCase() === s.toLowerCase()))
+    ) {
+      conflicts.push(t('publicJob.skills'))
+    }
+    return [...new Set(conflicts)]
+  }
+
+  const applyCvFormData = (data: CvParsedFormData, options?: { overwrite?: boolean }) => {
+    const overwrite = options?.overwrite === true
+    const dob = data.date_of_birth
+    let dob_day = ''
+    let dob_month = ''
+    let dob_year = ''
+    if (dob && /^\d{4}-\d{2}-\d{2}$/.test(dob)) {
+      const [y, m, d] = dob.split('-')
+      dob_year = y
+      dob_day = String(Number(d))
+      const monthNum = Number(m)
+      if (monthNum >= 1 && monthNum <= 12) dob_month = MONTHS[monthNum - 1]
+    }
+    const skillsRaw = data.skills
+    const skillsArray = Array.isArray(skillsRaw)
+      ? skillsRaw
+      : typeof skillsRaw === 'string'
+        ? skillsRaw.split(/[,;\n]/).map((s) => s.trim()).filter((s) => s.length > 0)
+        : []
+
+    setForm((p) => {
+      const merge = (key: keyof typeof p, value: string | number | undefined | null) => {
+        if (value == null || value === '') return p[key]
+        if (overwrite) return value as typeof p[typeof key]
+        const cur = p[key]
+        const empty = cur === '' || cur == null
+        if (!empty) return cur
+        return value as typeof cur
+      }
+      const mergedSkills = (() => {
+        if (!skillsArray.length) return p.skills
+        if (overwrite) return skillsArray.join(', ')
+        const current = (p.skills ?? '').split(/[,;\n]/).map((s) => s.trim()).filter(Boolean)
+        if (!current.length) return skillsArray.join(', ')
+        const seen = new Set(current.map((s) => s.toLowerCase()))
+        const extra = skillsArray.filter((s) => !seen.has(s.toLowerCase()))
+        return [...current, ...extra].join(', ')
+      })()
+      const mergedExpYears = (() => {
+        if (data.experience_years == null) return p.experience_years
+        if (overwrite) return data.experience_years
+        return p.experience_years !== '' ? p.experience_years : data.experience_years
+      })()
+      return {
+        ...p,
+        title: merge('title', data.title) as string,
+        first_name: merge('first_name', data.first_name) as string,
+        last_name: merge('last_name', data.last_name) as string,
+        preferred_name: merge('preferred_name', data.preferred_name) as string,
+        dob_day: overwrite && dob_day ? dob_day : (p.dob_day || dob_day),
+        dob_month: overwrite && dob_month ? dob_month : (p.dob_month || dob_month),
+        dob_year: overwrite && dob_year ? dob_year : (p.dob_year || dob_year),
+        gender: merge('gender', data.gender) as string,
+        email: merge('email', data.email) as string,
+        address: merge('address', data.address) as string,
+        address_line2: merge('address_line2', data.address_line2) as string,
+        city: merge('city', data.city) as string,
+        country: merge('country', data.country) as string,
+        postcode: merge('postcode', data.postcode) as string,
+        phone: merge('phone', data.phone) as string,
+        cell_number: merge('cell_number', data.cell_number) as string,
+        nationality: merge('nationality', data.nationality) as string,
+        second_nationality: merge('second_nationality', data.second_nationality) as string,
+        linkedin_url: merge('linkedin_url', data.linkedin_url) as string,
+        portfolio_url: merge('portfolio_url', data.portfolio_url) as string,
+        summary: merge('summary', data.summary) as string,
+        skills: mergedSkills,
+        experience_years: mergedExpYears,
+        education_level: merge('education_level', data.education_level) as string,
+        current_position: merge('current_position', data.current_position) as string,
+        location: merge('location', data.location) as string,
+      }
+    })
+
+    const eduList = Array.isArray(data.education) ? data.education : []
+    if (
+      eduList.length > 0 &&
+      (overwrite || isListEmpty(education, ['institution', 'degree_type', 'discipline', 'start_year']))
+    ) {
+      setEducation(
+        eduList.map((e) => ({
+          education_type: (e.education_type as string) ?? '',
+          degree_type: (e.degree_type as string) ?? '',
+          discipline: (e.discipline as string) ?? '',
+          other_specializations: (e.other_specializations as string) ?? '',
+          country: (e.country as string) ?? '',
+          institution: (e.institution as string) ?? '',
+          city_campus: (e.city_campus as string) ?? '',
+          study_level: (e.study_level as string) ?? '',
+          enrollment_status: (e.enrollment_status as string) ?? '',
+          start_year: (e.start_year as string) ?? '',
+          end_year: (e.end_year as string) ?? '',
+        }))
+      )
+    }
+
+    const expList = Array.isArray(data.experience) ? data.experience : []
+    if (
+      expList.length > 0 &&
+      (overwrite || isListEmpty(experience, ['job_title', 'company_name', 'responsibilities']))
+    ) {
+      setExperience(
+        expList.map((e) => ({
+          employment_status: (e.employment_status as string) ?? '',
+          employment_type: (e.employment_type as string) ?? '',
+          employment_type_details: (e.employment_type_details as string) ?? '',
+          job_title: (e.job_title as string) ?? '',
+          job_contract_type: (e.job_contract_type as string) ?? '',
+          job_level: (e.job_level as string) ?? '',
+          responsibilities: (e.responsibilities as string) ?? '',
+          start_month: (e.start_month as string) ?? '',
+          start_year: (e.start_year as string) ?? '',
+          start_day: (e.start_day as string) ?? '',
+          end_month: (e.end_month as string) ?? '',
+          end_year: (e.end_year as string) ?? '',
+          end_day: (e.end_day as string) ?? '',
+          company_name: (e.company_name as string) ?? '',
+          company_sector: (e.company_sector as string) ?? '',
+          country: (e.country as string) ?? '',
+          city: (e.city as string) ?? '',
+          department: (e.department as string) ?? '',
+          manager_name: (e.manager_name as string) ?? '',
+        }))
+      )
+    }
+
+    const langList = Array.isArray(data.languages) ? data.languages : []
+    if (
+      langList.length > 0 &&
+      (overwrite || isListEmpty(languages, ['language', 'speaking_proficiency']))
+    ) {
+      setLanguages(
+        langList.map((l) => ({
+          language: (l.language as string) ?? '',
+          speaking_proficiency: (l.speaking_proficiency as string) ?? '',
+          reading_proficiency: (l.reading_proficiency as string) ?? '',
+          writing_proficiency: (l.writing_proficiency as string) ?? '',
+        }))
+      )
+    }
+
+    const refList = Array.isArray(data.references) ? data.references : []
+    if (
+      refList.length > 0 &&
+      (overwrite || isListEmpty(references, ['first_name', 'last_name', 'email']))
+    ) {
+      const refs = refList.map((r) => ({
+        first_name: (r.first_name as string) ?? '',
+        last_name: (r.last_name as string) ?? '',
+        organization: (r.organization as string) ?? '',
+        job_title: (r.job_title as string) ?? '',
+        phone: (r.phone as string) ?? '',
+        email: (r.email as string) ?? '',
+      }))
+      while (refs.length < 3) refs.push(emptyRef())
+      setReferences(refs)
+    }
+  }
+
+  const fetchResumeAsFile = async (url: string, filename: string): Promise<File | null> => {
+    try {
+      const res = await fetch(url, { credentials: 'include' })
+      if (!res.ok) return null
+      const blob = await res.blob()
+      return new File([blob], filename || 'cv.pdf', { type: blob.type || 'application/pdf' })
+    } catch {
+      return null
+    }
+  }
+
+  const finalizeCvAutofill = (
+    res: ParseCvResponse,
+    resumeFileToSet: File | null,
+    successMessage: string,
+    overwrite = false
+  ) => {
+    applyCvFormData(res.form_data, { overwrite })
+    if (resumeFileToSet) setResumeFile(resumeFileToSet)
+    setCvSectionConfidence(res.section_confidence ?? {})
+    setCvAutofillWarnings(res.warnings ?? [])
+    setCvAutofillMessage(successMessage)
+    setPendingCvAutofill(null)
+  }
+
+  const handleCvParseResult = (
+    res: ParseCvResponse,
+    resumeFileToSet: File | null,
+    successMessage: string
+  ) => {
+    const conflicts = detectCvConflicts(res.form_data)
+    if (conflicts.length > 0) {
+      setPendingCvAutofill({
+        formData: res.form_data,
+        sectionConfidence: res.section_confidence ?? {},
+        warnings: res.warnings ?? [],
+        resumeFile: resumeFileToSet,
+        conflicts,
+        successMessage,
+      })
+      return
+    }
+    finalizeCvAutofill(res, resumeFileToSet, successMessage, false)
+  }
+
+  const handleCvAutofillUpload = async (file: File) => {
+    setCvParsing(true)
+    setCvAutofillError(null)
+    setCvAutofillMessage(null)
+    setCvAutofillWarnings([])
+    setPendingCvAutofill(null)
+    try {
+      const res = await applicationsApi.parseCv(file)
+      handleCvParseResult(res.data, file, t('publicJob.cvAutofillSuccess'))
+    } catch (e: unknown) {
+      setCvAutofillError(getApiErrorMessage(e))
+    } finally {
+      setCvParsing(false)
+    }
+  }
+
+  const handleUseLastCv = async () => {
+    setCvParsing(true)
+    setCvAutofillError(null)
+    setCvAutofillMessage(null)
+    setCvAutofillWarnings([])
+    setPendingCvAutofill(null)
+    try {
+      const res = await applicationsApi.parseLastCv(slug ? { exclude_job_slug: slug } : undefined)
+      let file: File | null = null
+      if (res.data.resume_url) {
+        file = await fetchResumeAsFile(
+          res.data.resume_url,
+          res.data.resume_filename || 'cv.pdf'
+        )
+      }
+      handleCvParseResult(res.data, file, t('publicJob.cvAutofillFromLastSuccess'))
+    } catch (e: unknown) {
+      setCvAutofillError(getApiErrorMessage(e))
+    } finally {
+      setCvParsing(false)
+    }
+  }
+
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
   ) => {
@@ -707,22 +1087,183 @@ export default function PublicJobApply() {
                 </div>
               )}
 
+              <div className="rounded-xl border border-teal-200 bg-gradient-to-br from-teal-50/80 to-slate-50 p-4 dark:border-teal-800 dark:from-teal-950/40 dark:to-slate-800/60">
+                <div className="flex items-start gap-3">
+                  <div className="mt-0.5 rounded-lg bg-teal-100 p-2 dark:bg-teal-900/50">
+                    <Sparkles className="h-5 w-5 text-teal-700 dark:text-teal-300" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <h2 className="text-sm font-semibold text-slate-800 dark:text-slate-100">
+                      {t('publicJob.cvAutofillTitle')}
+                    </h2>
+                    <p className="mt-1 text-xs text-slate-600 dark:text-slate-400">
+                      {t('publicJob.cvAutofillHint')}
+                    </p>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg bg-teal-600 px-3 py-2 text-sm font-medium text-white hover:bg-teal-700 disabled:opacity-60">
+                        <FileUp className="h-4 w-4" />
+                        <span>{cvParsing ? t('publicJob.cvAutofillParsing') : t('publicJob.cvAutofillUpload')}</span>
+                        <input
+                          ref={cvAutofillInputRef}
+                          type="file"
+                          accept=".pdf,.doc,.docx,.odt,.rtf,.txt,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                          className="hidden"
+                          disabled={cvParsing}
+                          onChange={(e) => {
+                            const f = e.target.files?.[0]
+                            if (f) void handleCvAutofillUpload(f)
+                            e.target.value = ''
+                          }}
+                        />
+                      </label>
+                      {lastCvInfo?.available && (
+                        <button
+                          type="button"
+                          disabled={cvParsing}
+                          onClick={() => void handleUseLastCv()}
+                          className="inline-flex items-center gap-2 rounded-lg border border-teal-300 bg-white px-3 py-2 text-sm font-medium text-teal-800 hover:bg-teal-50 disabled:opacity-60 dark:border-teal-700 dark:bg-slate-800 dark:text-teal-200 dark:hover:bg-slate-700"
+                        >
+                          {t('publicJob.cvAutofillUseLast')}
+                        </button>
+                      )}
+                    </div>
+                    {lastCvInfo?.available && lastCvInfo.job_title && (
+                      <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+                        {t('publicJob.cvAutofillLastJob', { job: lastCvInfo.job_title })}
+                      </p>
+                    )}
+                    {cvAutofillMessage && (
+                      <p className="mt-2 text-xs font-medium text-teal-800 dark:text-teal-200">
+                        {cvAutofillMessage}
+                      </p>
+                    )}
+                    {cvAutofillError && (
+                      <p className="mt-2 text-xs text-red-600 dark:text-red-400">{cvAutofillError}</p>
+                    )}
+                    {cvAutofillWarnings.length > 0 && (
+                      <ul className="mt-2 list-inside list-disc text-xs text-amber-700 dark:text-amber-300">
+                        {cvAutofillWarnings.slice(0, 3).map((w) => (
+                          <li key={w}>{w}</li>
+                        ))}
+                      </ul>
+                    )}
+                    {Object.keys(cvSectionConfidence).length > 0 && (
+                      <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+                        {t('publicJob.cvConfidenceLegend')}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {pendingCvAutofill && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+                  <div
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="cv-overwrite-title"
+                    className="w-full max-w-md rounded-xl border border-slate-200 bg-white p-6 shadow-xl dark:border-slate-600 dark:bg-slate-800"
+                  >
+                    <h3
+                      id="cv-overwrite-title"
+                      className="text-base font-semibold text-slate-800 dark:text-slate-100"
+                    >
+                      {t('publicJob.cvAutofillOverwriteTitle')}
+                    </h3>
+                    <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">
+                      {t('publicJob.cvAutofillOverwriteHint')}
+                    </p>
+                    <ul className="mt-3 list-inside list-disc text-sm text-amber-800 dark:text-amber-200">
+                      {pendingCvAutofill.conflicts.map((c) => (
+                        <li key={c}>{c}</li>
+                      ))}
+                    </ul>
+                    <div className="mt-5 flex flex-wrap justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setPendingCvAutofill(null)}
+                        className="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-700"
+                      >
+                        {t('publicJob.cvAutofillCancel')}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          finalizeCvAutofill(
+                            {
+                              form_data: pendingCvAutofill.formData,
+                              section_confidence: pendingCvAutofill.sectionConfidence,
+                              warnings: pendingCvAutofill.warnings,
+                              source: 'upload',
+                            },
+                            pendingCvAutofill.resumeFile,
+                            pendingCvAutofill.successMessage,
+                            false
+                          )
+                        }
+                        className="rounded-lg border border-teal-300 bg-teal-50 px-3 py-2 text-sm font-medium text-teal-800 hover:bg-teal-100 dark:border-teal-700 dark:bg-teal-900/30 dark:text-teal-200"
+                      >
+                        {t('publicJob.cvAutofillFillEmptyOnly')}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          finalizeCvAutofill(
+                            {
+                              form_data: pendingCvAutofill.formData,
+                              section_confidence: pendingCvAutofill.sectionConfidence,
+                              warnings: pendingCvAutofill.warnings,
+                              source: 'upload',
+                            },
+                            pendingCvAutofill.resumeFile,
+                            pendingCvAutofill.successMessage,
+                            true
+                          )
+                        }
+                        className="rounded-lg bg-teal-600 px-3 py-2 text-sm font-medium text-white hover:bg-teal-700"
+                      >
+                        {t('publicJob.cvAutofillReplaceAll')}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Indicateur d'étapes */}
               <div className="mb-6 flex flex-wrap gap-2 border-b border-slate-200 pb-4 dark:border-slate-600">
-                {FORM_SECTIONS.map((key, idx) => (
-                  <button
-                    key={key}
-                    type="button"
-                    onClick={() => setCurrentStep(idx)}
-                    className={`rounded-full px-3 py-1 text-xs font-medium ${
-                      currentStep === idx
-                        ? 'bg-teal-600 text-white'
-                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-700 dark:text-slate-300 dark:hover:bg-slate-600'
-                    }`}
-                  >
-                    {idx + 1}. {t(`publicJob.${key}`)}
-                  </button>
-                ))}
+                {FORM_SECTIONS.map((key, idx) => {
+                  const confKey = key as CvAutofillSectionKey
+                  const badge =
+                    key !== 'signature'
+                      ? confidenceBadge(cvSectionConfidence[confKey], t)
+                      : null
+                  return (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => setCurrentStep(idx)}
+                      className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium ${
+                        currentStep === idx
+                          ? 'bg-teal-600 text-white'
+                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-700 dark:text-slate-300 dark:hover:bg-slate-600'
+                      }`}
+                    >
+                      <span>
+                        {idx + 1}. {t(`publicJob.${key}`)}
+                      </span>
+                      {badge && (
+                        <span
+                          className={`rounded px-1 py-0.5 text-[10px] font-normal leading-none ${
+                            currentStep === idx ? 'bg-white/20 text-white' : badge.cls
+                          }`}
+                          title={badge.label}
+                        >
+                          {badge.label}
+                        </span>
+                      )}
+                    </button>
+                  )
+                })}
               </div>
 
               {currentStep === 0 && (
