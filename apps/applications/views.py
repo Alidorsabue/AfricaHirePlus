@@ -212,6 +212,16 @@ class ParseCvForApplicationView(generics.GenericAPIView):
     permission_classes = [IsAuthenticated, IsCandidate]
 
     def post(self, request):
+        try:
+            return self._parse_cv(request)
+        except Exception as e:
+            logger.exception("ParseCvForApplicationView: erreur inattendue user=%s", request.user.id)
+            return Response(
+                {'detail': f'Erreur lors de l\'analyse du CV : {e}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+    def _parse_cv(self, request):
         use_last = str(request.data.get('use_last_cv', '')).lower() in ('1', 'true', 'yes')
         exclude_slug = request.data.get('exclude_job_slug') or None
         resume_file = request.FILES.get('resume')
@@ -236,7 +246,9 @@ class ParseCvForApplicationView(generics.GenericAPIView):
                 name = cand.resume.name or ''
                 try:
                     with cand.resume.open('rb') as f:
-                        extraction = extract_cv(f, filename=name, content_type='')
+                        extraction = extract_cv(
+                            f, filename=name, content_type='', allow_ocr=False,
+                        )
                     raw_text = extraction.text or ''
                     warnings.extend(extraction.warnings or [])
                 except Exception as e:
@@ -270,7 +282,9 @@ class ParseCvForApplicationView(generics.GenericAPIView):
 
             name = getattr(resume_file, 'name', '') or ''
             ct = getattr(resume_file, 'content_type', '') or ''
-            extraction = extract_cv(resume_file, filename=name, content_type=ct)
+            extraction = extract_cv(
+                resume_file, filename=name, content_type=ct, allow_ocr=False,
+            )
             if hasattr(resume_file, 'seek'):
                 try:
                     resume_file.seek(0)

@@ -317,6 +317,7 @@
     "cvConfidenceMedium": "Review",
     "cvConfidenceLow": "Low confidence",
     "cvConfidenceLegend": "Extraction reliability per section",
+    "cvAutofillServerError": "Resume parsing failed (timeout or connection interrupted). Try again with a text-based PDF or Word file under 10 MB. If the issue persists, fill in the form manually.",
     "personalDetails": "Personal details",
     "personalDetailsHint": "Please fill in all mandatory fields marked with an asterisk (*).",
     "personalInfo": "Personal information",

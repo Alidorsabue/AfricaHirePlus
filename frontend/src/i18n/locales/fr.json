@@ -319,6 +319,7 @@
     "cvConfidenceMedium": "À vérifier",
     "cvConfidenceLow": "Peu fiable",
     "cvConfidenceLegend": "Indicateur de fiabilité de l'extraction par rubrique",
+    "cvAutofillServerError": "L'analyse du CV a échoué (délai dépassé ou connexion interrompue). Réessayez avec un PDF texte ou Word de moins de 10 Mo. Si le problème persiste, remplissez le formulaire manuellement.",
     "personalDetails": "Détails personnels",
     "personalDetailsHint": "Veuillez remplir tous les champs obligatoires marqués d'un astérisque (*).",
     "personalInfo": "Informations personnelles",

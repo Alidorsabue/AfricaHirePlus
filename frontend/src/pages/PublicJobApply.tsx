@@ -37,6 +37,16 @@ function getApiErrorMessage(error: unknown): string {
       return parts.join(' — ')
     }
   }
+  if (isAxiosError(error) && !error.response) {
+    const code = error.code ?? ''
+    if (
+      code === 'ERR_NETWORK' ||
+      code === 'ERR_HTTP2_PROTOCOL_ERROR' ||
+      error.message === 'Network Error'
+    ) {
+      return 'CV_PARSE_NETWORK'
+    }
+  }
   return error instanceof Error ? error.message : String(error)
 }
 
@@ -886,7 +896,8 @@ export default function PublicJobApply() {
       const res = await applicationsApi.parseCv(file)
       handleCvParseResult(res.data, file, t('publicJob.cvAutofillSuccess'))
     } catch (e: unknown) {
-      setCvAutofillError(getApiErrorMessage(e))
+      const msg = getApiErrorMessage(e)
+      setCvAutofillError(msg === 'CV_PARSE_NETWORK' ? t('publicJob.cvAutofillServerError') : msg)
     } finally {
       setCvParsing(false)
     }
@@ -909,7 +920,8 @@ export default function PublicJobApply() {
       }
       handleCvParseResult(res.data, file, t('publicJob.cvAutofillFromLastSuccess'))
     } catch (e: unknown) {
-      setCvAutofillError(getApiErrorMessage(e))
+      const msg = getApiErrorMessage(e)
+      setCvAutofillError(msg === 'CV_PARSE_NETWORK' ? t('publicJob.cvAutofillServerError') : msg)
     } finally {
       setCvParsing(false)
     }

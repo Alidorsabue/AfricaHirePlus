@@ -59,9 +59,9 @@ Deux façons, une seule suffit :
 - Au démarrage, le **Procfile** exécute :
   1. `python manage.py migrate --noinput`
   2. `python manage.py collectstatic --noinput`
-  3. `gunicorn config.wsgi:application --bind 0.0.0.0:$PORT`
+  3. `gunicorn config.wsgi:application --bind 0.0.0.0:$PORT --workers 1 --timeout 120`
 
-Le **port** est fourni par Railway via `$PORT`.
+Le **port** est fourni par Railway via `$PORT`. Le timeout Gunicorn (120 s) est nécessaire pour l’analyse de CV (`/applications/parse-cv/`). Variable optionnelle : `CV_EXTRACTION_ALLOW_OCR=true` pour activer l’OCR sur PDF scannés (lourd en prod).
 
 ## 5. Premier Super Admin
 

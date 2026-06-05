@@ -172,16 +172,13 @@ export const applicationsApi = {
   parseCv: (file: File) => {
     const fd = new FormData()
     fd.append('resume', file)
-    return api.post<ParseCvResponse>('/applications/parse-cv/', fd, {
-      timeout: 90_000,
-      headers: { 'Content-Type': 'multipart/form-data' },
-    })
+    return api.post<ParseCvResponse>('/applications/parse-cv/', fd, { timeout: 120_000 })
   },
   /** Réutilise le CV de la dernière candidature pour pré-remplir le formulaire. */
   parseLastCv: (params?: { exclude_job_slug?: string }) => {
     const fd = new FormData()
     fd.append('use_last_cv', 'true')
     if (params?.exclude_job_slug) fd.append('exclude_job_slug', params.exclude_job_slug)
-    return api.post<ParseCvResponse>('/applications/parse-cv/', fd, { timeout: 60_000 })
+    return api.post<ParseCvResponse>('/applications/parse-cv/', fd, { timeout: 120_000 })
   },
 }

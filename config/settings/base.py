@@ -111,6 +111,8 @@ MEDIA_ROOT = BASE_DIR / 'media'
 # Limites d'upload pour CV et lettre de motivation (évite "Network Error" si fichiers trop lourds)
 DATA_UPLOAD_MAX_MEMORY_SIZE = 20 * 1024 * 1024  # 20 Mo
 FILE_UPLOAD_MAX_MEMORY_SIZE = 20 * 1024 * 1024  # 20 Mo
+# OCR PDF (lourd / lent sur Railway) : désactivé par défaut ; activer via CV_EXTRACTION_ALLOW_OCR=true
+CV_EXTRACTION_ALLOW_OCR = os.environ.get('CV_EXTRACTION_ALLOW_OCR', 'false').lower() == 'true'
 
 # Default primary key
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
