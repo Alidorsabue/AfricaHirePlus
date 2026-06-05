@@ -99,6 +99,8 @@ class ScreeningRule(SoftDeleteMixin, TimeStampedMixin, models.Model):
 
     class RuleType(models.TextChoices):
         KEYWORDS = 'keywords', 'Mots-clés (CV)'
+        SKILLS = 'skills', 'Compétences'
+        LANGUAGE = 'language', 'Langues'
         MIN_EXPERIENCE = 'min_experience', 'Années d\'expérience min'
         EDUCATION_LEVEL = 'education_level', 'Niveau d\'études'
         LOCATION = 'location', 'Localisation'
